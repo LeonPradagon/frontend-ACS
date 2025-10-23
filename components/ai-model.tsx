@@ -85,6 +85,8 @@ import {
   Radar as RadarIcon,
   ScatterChart as ScatterChartIcon,
   AreaChart as AreaChartIcon,
+  Rocket,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -112,6 +114,22 @@ type VisualizationType =
   | "causality"
   | "threat_matrix"
   | string;
+
+interface IntentAnalysis {
+  recommendedType: string;
+  suggestedTitle: string;
+  needsComparison: boolean;
+  metrics: string[];
+  confidence: number;
+  reasoning: string;
+}
+
+interface DataSummary {
+  data_points: number;
+  data_type: string;
+  generated_data: boolean;
+  confidence?: number;
+}
 
 interface ChatMessage {
   id: string;
@@ -176,6 +194,31 @@ interface VisualizationData {
   narrative?: string;
   insights?: string[];
   recommendations?: string[];
+  intent_analysis?: IntentAnalysis;
+  data_summary?: DataSummary;
+  suggestions?: string[];
+}
+
+interface AdvancedVisualResponse {
+  success: boolean;
+  question: string;
+  answer: string;
+  analysis_results: AnalysisResult[];
+  visualization: VisualizationData;
+  visual_narrative: string;
+  sources: Source[];
+  query_analysis: any;
+  retrieval_metadata: any;
+  enhanced_metadata: {
+    processing_steps: string[];
+    total_processing_time: number;
+    confidence_score: number;
+    analysis_type: string;
+    visualization_ready: boolean;
+    data_points: number;
+    visual_quality: string;
+  };
+  timestamp: string;
 }
 
 interface AnalysisResult {
@@ -185,6 +228,55 @@ interface AnalysisResult {
   narrative?: string;
   insights?: string[];
   recommendations?: string[];
+  structure?: {
+    nodes: any[];
+    links: any[];
+    groups: any[];
+  };
+  analysis?: {
+    centrality: any;
+    density: number;
+    diameter: number;
+    key_players: any[];
+  };
+  metadata?: any;
+}
+
+interface EnhancedVisualizationData extends VisualizationData {
+  intent_analysis?: IntentAnalysis;
+  data_summary?: DataSummary;
+  suggestions?: string[];
+  metadata?: {
+    data_source: string;
+    is_real_data: boolean;
+    generated_at: string;
+    real_data_sources?: any[];
+  };
+}
+
+interface SmartQueryResponse {
+  type: "visual_analysis" | "text_response" | "swot_analysis" | "trend_analysis" | "advanced_visual_analysis";
+  visualization?: EnhancedVisualizationData;
+  narrative?: string;
+  data_summary?: DataSummary;
+  intent_analysis?: IntentAnalysis;
+  answer?: string;
+  sources?: Source[];
+  model?: string;
+  analysis?: any;
+  data_source?: "real_data" | "generated_data";
+  is_real_data?: boolean;
+  suggestions?: string[];
+  metadata?: {
+    question: string;
+    visualization_type: string;
+    data_source: string;
+    generated_at: string;
+    model: string;
+    real_data_sources?: any[];
+  };
+  analysis_results?: AnalysisResult[];
+  enhanced_metadata?: any;
 }
 
 // ==================== AI PERSONA CONFIGURATIONS ====================
@@ -209,7 +301,7 @@ const AI_PERSONAS = {
   },
   risk: {
     name: "Risk Monitor",
-    description: "Ahli monitoring dan analisis risiko",
+    description: "Ahli monitoring dan analisis risiko keamanan",
     icon: AlertOctagon,
     color: "bg-red-100 text-red-700 border-red-200",
   },
@@ -223,17 +315,11 @@ const AI_PERSONAS = {
 
 // ==================== MODEL CONFIGURATIONS ====================
 const AVAILABLE_MODELS = {
-  llama: {
-    name: "Llama 3.1",
-    description: "Model terbaru Meta dengan kemampuan reasoning yang baik",
-    icon: Brain,
+  "llama-3.3-70b-versatile": {
+    name: "Llama 3.3 70B Versatile",
+    description: "Model Groq terbaru dengan kecepatan tinggi dan reasoning yang excellent",
+    icon: Rocket,
     color: "bg-purple-100 text-purple-700 border-purple-200",
-  },
-  mistral: {
-    name: "Mistral 7B",
-    description: "Model efisien dengan performa tinggi untuk ukuran 7B",
-    icon: Zap,
-    color: "bg-blue-100 text-blue-700 border-blue-200",
   },
 };
 
@@ -266,7 +352,7 @@ const CLASSIFICATION_LEVELS = {
 };
 
 // ==================== QUERY TEMPLATES ====================
-const QUERY_TEMPLATES = {
+const QUERY_TEMPLATES: { [key: string]: string[] } = {
   qa: [
     "Apa pola serangan siber yang paling umum pada kuartal ini?",
     "Bagaimana tren ancaman terhadap infrastruktur kritis?",
@@ -287,15 +373,10 @@ const QUERY_TEMPLATES = {
     "Analisis tingkat risiko dari kerentanan yang baru ditemukan",
     "Identifikasi emerging threats yang perlu diprioritaskan",
   ],
-  visual: [
-    "Buat visualisasi jaringan hubungan antara aktor ancaman",
-    "Analisis tren serangan siber 6 bulan terakhir dengan line chart",
-    "Buat peta panas distribusi geografis serangan siber",
-    "Visualisasi analisis SWOT untuk strategi keamanan kami",
-    "Buat diagram fishbone untuk analisis root cause incident",
-    "Tampilkan perbandingan frekuensi serangan per region dengan bar chart",
-    "Buat radar chart kemampuan security maturity",
-    "Analisis scatter plot korelasi antara kerentanan dan serangan",
+  enhanced_visual: [
+    "Buat grafik penjualan berdasarkan data real",
+    "Analisis tren pengguna aktif dengan data aktual", 
+    "Bandingkan performa produk menggunakan data real",
   ],
 };
 
@@ -364,67 +445,281 @@ const VISUALIZATION_TYPES = {
 };
 
 // ==================== BASE URL CONFIGURATION ====================
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 // ==================== MODE CONFIGURATIONS ====================
-const MODE_CONFIG = {
+const MODE_CONFIG: { [key: string]: {
+  name: string;
+  description: string;
+  icon: any;
+  color: string;
+  persona: keyof typeof AI_PERSONAS;
+  endpoint?: string;
+} } = {
   qa: {
     name: "Q&A",
     description: "Tanya jawab langsung dengan sistem",
     icon: MessageSquare,
     color: "bg-blue-100 text-blue-700 border-blue-200",
-    persona: "analyst" as keyof typeof AI_PERSONAS,
+    persona: "analyst",
   },
   summary: {
     name: "Summary",
     description: "Ringkasan dan ekstraksi informasi",
     icon: FileText,
     color: "bg-green-100 text-green-700 border-green-200",
-    persona: "analyst" as keyof typeof AI_PERSONAS,
+    persona: "analyst",
   },
   ide: {
     name: "Ide Generator",
     description: "Generasi ide kreatif dan solusi inovatif",
     icon: Lightbulb,
     color: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    persona: "innovator" as keyof typeof AI_PERSONAS,
+    persona: "innovator",
   },
   risk: {
     name: "Risk Monitoring",
     description: "Monitoring dan analisis risiko keamanan",
     icon: AlertOctagon,
     color: "bg-red-100 text-red-700 border-red-200",
-    persona: "risk" as keyof typeof AI_PERSONAS,
+    persona: "risk",
   },
-  visual: {
-    name: "Visual Analysis",
-    description: "Analisis visual dan data visualization",
-    icon: PieChartIcon,
-    color: "bg-purple-100 text-purple-700 border-purple-200",
-    persona: "strategist" as keyof typeof AI_PERSONAS,
+  enhanced_visual: {
+    name: "Enhanced Visual",
+    description: "Visualisasi dengan pencarian data real terlebih dahulu",
+    icon: Database,
+    color: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    persona: "analyst",
+    endpoint: "enhanced-visual-request",
   },
 };
 
 // ==================== CHART COLORS ====================
 const CHART_COLORS = [
-  "#0088FE",
-  "#00C49F",
-  "#FFBB28",
-  "#FF8042",
-  "#8884D8",
-  "#82CA9D",
-  "#FFC658",
-  "#8DD1E1",
-  "#D084D0",
-  "#FF7C7C",
-  "#A4DE6C",
-  "#D0ED57",
-  "#FFC0CB",
-  "#BA55D3",
-  "#20B2AA",
+  "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", 
+  "#82CA9D", "#FFC658", "#8DD1E1", "#D084D0", "#FF7C7C",
+  "#A4DE6C", "#D0ED57", "#FFC0CB", "#BA55D3", "#20B2AA"
 ];
 
-// ==================== DATA VALIDATION AND PROCESSING ====================
+// ==================== API SERVICE FUNCTIONS ====================
+
+const getToken = (): string => {
+  if (typeof window === "undefined") {
+    throw new Error("Window tidak tersedia");
+  }
+  
+  const token = localStorage.getItem("accessToken");
+  console.log("🔐 Token retrieval:", token ? `✅ Found (${token.substring(0, 20)}...)` : "❌ Missing");
+  
+  if (!token) {
+    console.error("❌ No access token found in localStorage");
+    throw new Error("Token tidak ditemukan. Silakan login terlebih dahulu.");
+  }
+  
+  if (!token.startsWith("eyJ") || token.length < 50) {
+    console.error("❌ Invalid token format");
+    localStorage.removeItem("accessToken");
+    throw new Error("Token tidak valid. Silakan login ulang.");
+  }
+  
+  return token;
+};
+
+/**
+ * Enhanced Visual Request dengan pencarian data real
+ */
+const enhancedVisualRequest = async (question: string, options = {}): Promise<SmartQueryResponse> => {
+  try {
+    const token = getToken();
+    console.log(`🤖 Mengirim enhanced visual request ke: ${BASE_URL}/api/chat/advanced-visual-analysis`);
+
+    const response = await fetch(`${BASE_URL}/api/chat/advanced-visual-analysis`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question,
+        model: "llama-3.3-70b-versatile",
+        enable_real_data: true,
+        enable_visualization: true,
+        ...options,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Enhanced visual request failed: ${response.status}`, errorText);
+      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Enhanced visual response:`, data);
+    
+    return transformEnhancedVisualResponse(data);
+  } catch (error) {
+    console.error("❌ Enhanced visual request error:", error);
+    throw error;
+  }
+};
+
+const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
+  console.log("🔄 Transforming enhanced visual response:", data);
+  
+  const defaultVisualizationData: EnhancedVisualizationData = {
+    type: "fallback",
+    data: { items: [] },
+    title: "Analysis Result",
+    description: "Hasil analisis",
+    narrative: data.answer || data.narrative || "Analisis berhasil di-generate",
+    insights: ["Analisis selesai"],
+    recommendations: ["Gunakan query yang lebih spesifik"],
+    metadata: {
+      data_source: "fallback",
+      is_real_data: false,
+      generated_at: data.timestamp || new Date().toISOString(),
+      real_data_sources: data.sources || []
+    }
+  };
+
+  let visualizationData: EnhancedVisualizationData = defaultVisualizationData;
+  let analysisResults: AnalysisResult[] = [];
+  
+  if (data.visualization) {
+    visualizationData = {
+      ...data.visualization,
+      data: validateAndFixAnalysisData(data.visualization.data),
+      metadata: {
+        data_source: data.data_source || "generated_data",
+        is_real_data: data.is_real_data || false,
+        generated_at: data.timestamp || new Date().toISOString(),
+        real_data_sources: data.sources || []
+      }
+    };
+    
+    analysisResults = [{
+      type: data.visualization.type || "visual_analysis",
+      title: data.visualization.title || "Visual Analysis",
+      data: visualizationData.data,
+      narrative: data.narrative || data.visualization.narrative || '',
+      insights: data.visualization.insights || [],
+      recommendations: data.visualization.recommendations || []
+    }];
+  }
+  
+  if (data.answer && visualizationData === defaultVisualizationData) {
+    visualizationData = {
+      type: "text",
+      data: { items: [] },
+      title: "Text Analysis",
+      description: "Analisis teks",
+      narrative: data.answer,
+      insights: ["Response berhasil di-generate"],
+      recommendations: ["Gunakan query yang lebih spesifik untuk visualisasi"],
+      metadata: {
+        data_source: "text_response",
+        is_real_data: false,
+        generated_at: data.timestamp || new Date().toISOString(),
+        real_data_sources: []
+      }
+    };
+    
+    analysisResults = [{
+      type: "text_response",
+      title: "AI Response",
+      data: { items: [] },
+      narrative: data.answer,
+      insights: ["Response berhasil di-generate"],
+      recommendations: ["Gunakan query yang lebih spesifik untuk visualisasi"]
+    }];
+  }
+
+  const response: SmartQueryResponse = {
+    type: "visual_analysis",
+    visualization: visualizationData,
+    narrative: data.narrative || data.answer || '',
+    data_summary: {
+      data_points: data.enhanced_metadata?.data_points || data.data_summary?.data_points || 0,
+      data_type: visualizationData.type || "analysis",
+      generated_data: !data.is_real_data,
+      confidence: data.enhanced_metadata?.confidence_score || data.data_summary?.confidence
+    },
+    answer: data.answer,
+    sources: data.sources,
+    model: "llama-3.3-70b-versatile",
+    data_source: data.data_source || (data.is_real_data ? "real_data" : "generated_data"),
+    is_real_data: data.is_real_data || false,
+    suggestions: data.suggestions || [
+      "Gunakan query yang lebih spesifik untuk hasil yang lebih akurat",
+      "Coba mode analisis yang berbeda untuk perspektif lain"
+    ],
+    analysis_results: analysisResults,
+    enhanced_metadata: data.enhanced_metadata,
+    metadata: {
+      question: data.question,
+      visualization_type: visualizationData.type,
+      data_source: data.data_source || "generated_data",
+      generated_at: data.timestamp || new Date().toISOString(),
+      model: "llama-3.3-70b-versatile",
+      real_data_sources: data.sources || []
+    }
+  };
+  
+  console.log("✅ Transformed enhanced visual response:", response);
+  return response;
+};
+
+/**
+ * Advanced Query untuk analisis teks lanjutan
+ */
+const advancedQuery = async (question: string, options = {}): Promise<any> => {
+  try {
+    const token = getToken();
+  
+    const enhancedOptions = {
+      model: "llama-3.3-70b-versatile",
+      enable_classification: true,
+      enable_tool_calling: true,
+      enable_pii_masking: true,
+      enable_security_scan: true,
+      enable_formatting: true,
+      persona: "analyst",
+      user_role: "analyst",
+      ...options,
+    };
+  
+    console.log(`📤 Mengirim query ke: ${BASE_URL}/api/chat/advanced-query`);
+
+    const response = await fetch(`${BASE_URL}/api/chat/advanced-query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question,
+        ...enhancedOptions,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Enhanced query failed: ${response.status}`, errorText);
+      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`Enhanced query successful`, data);
+    return data;
+  } catch (error) {
+    console.error("Enhanced query error:", error);
+    throw error;
+  }
+};
+
+// ==================== DATA VALIDATION & TRANSFORMATION ====================
+
 const validateAndFixAnalysisData = (data: any): any => {
   console.log("🔧 Original data for visualization:", data);
 
@@ -433,32 +728,51 @@ const validateAndFixAnalysisData = (data: any): any => {
     return { items: [] };
   }
 
-  // Case 1: Data sudah dalam format yang benar { items: [...] }
+  // SPECIAL CASE: Network data
+  if (data.type === "network" || data.visualizationType === "network") {
+    console.log("✅ Network data structure detected");
+    
+    if (data.items && data.links) {
+      return data;
+    } else if (data.nodes && data.links) {
+      return { items: data.nodes, links: data.links };
+    } else if (data.data && data.data.nodes) {
+      return { items: data.data.nodes, links: data.data.links || [] };
+    } else if (data.structure && data.structure.nodes) {
+      return { 
+        items: data.structure.nodes, 
+        links: data.structure.links || [],
+        metadata: data.metadata
+      };
+    }
+  }
+
+  // Case 1: Data dari VisualAnalysisService (format baru)
+  if (data.data && data.data.datasets) {
+    console.log("✅ Chart.js format detected");
+    const items = data.data.labels?.map((label: string, index: number) => {
+      const item: any = { name: label };
+      data.data.datasets.forEach((dataset: any) => {
+        if (dataset.data && Array.isArray(dataset.data)) {
+          const value = dataset.data[index];
+          item[dataset.label || 'value'] = typeof value === 'number' ? value : 1;
+        }
+      });
+      return item;
+    }) || [];
+    return { items: items.filter(Boolean) };
+  }
+
+  // Case 2: Data sudah dalam format yang benar { items: [...] }
   if (data.items && Array.isArray(data.items)) {
     console.log("✅ Data already has items array");
     return data;
   }
 
-  // Case 2: Data adalah array langsung
+  // Case 3: Data adalah array langsung
   if (Array.isArray(data)) {
     console.log("✅ Data is direct array, wrapping in items");
     return { items: data };
-  }
-
-  // Case 3: Data adalah object dengan datasets (Chart.js format)
-  if (data.datasets && Array.isArray(data.datasets)) {
-    console.log("✅ Data has Chart.js datasets structure");
-    const items =
-      data.labels?.map((label: string, index: number) => {
-        const item: any = { name: label };
-        data.datasets.forEach((dataset: any) => {
-          if (dataset.data && Array.isArray(dataset.data)) {
-            item[dataset.label || `dataset_${index}`] = dataset.data[index];
-          }
-        });
-        return item;
-      }) || [];
-    return { items: items.filter(Boolean) };
   }
 
   // Case 4: Data adalah object dengan properti array
@@ -468,46 +782,85 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   if (arrayKeys.length > 0) {
     console.log(`✅ Found array keys:`, arrayKeys);
-
-    // Jika ada key 'data', gunakan itu
+    
     if (arrayKeys.includes("data")) {
       return { items: data.data };
     }
-
-    // Gunakan array terpanjang
-    const longestArrayKey = arrayKeys.reduce((longest, key) =>
+    
+    const longestArrayKey = arrayKeys.reduce((longest, key) => 
       data[key].length > data[longest].length ? key : longest
     );
     return { items: data[longestArrayKey] };
   }
 
-  // Case 5: Data adalah object biasa - convert ke array
+  // Case 5: Data dari quadrant analysis
+  if (data.quadrants && typeof data.quadrants === 'object') {
+    console.log("✅ Quadrant analysis data detected");
+    const items: any[] = [];
+    Object.values(data.quadrants).forEach((quadrant: any) => {
+      if (Array.isArray(quadrant.items)) {
+        quadrant.items.forEach((item: any) => {
+          items.push({
+            name: item.label || `Item_${items.length}`,
+            value: 1,
+            quadrant: quadrant.label || 'unknown',
+            ...item
+          });
+        });
+      }
+    });
+    return { items };
+  }
+
+  // Case 6: Data dari SWOT analysis
+  if (data.factors && typeof data.factors === 'object') {
+    console.log("✅ SWOT analysis data detected");
+    const items: any[] = [];
+    Object.entries(data.factors).forEach(([category, factors]: [string, any]) => {
+      if (Array.isArray(factors)) {
+        factors.forEach((factor: any, index: number) => {
+          items.push({
+            name: typeof factor === 'string' ? factor : factor.name || `Factor_${index}`,
+            value: 1,
+            category: category,
+            ...(typeof factor === 'object' ? factor : {})
+          });
+        });
+      }
+    });
+    return { items };
+  }
+
+  // Case 7: Data adalah object biasa - convert ke array
   if (typeof data === "object") {
     console.log("✅ Converting object to array");
     try {
-      // Coba extract values
       const values = Object.values(data);
-      if (values.length > 0) {
-        // Jika values adalah array of objects, return langsung
-        if (values.every((item) => typeof item === "object" && item !== null)) {
-          return { items: values };
-        }
-
-        // Jika values adalah primitive, convert ke array of objects
-        const items = Object.entries(data).map(([key, value]) => ({
-          name: key,
-          value: typeof value === "number" ? value : 1,
-          label: key,
-          ...(typeof value === "object" ? value : {}),
-        }));
-        return { items };
+      if (values.length > 0 && values.every(item => typeof item === 'object' && item !== null)) {
+        return { items: values };
       }
+
+      const items = Object.entries(data).map(([key, value]) => {
+        const item: any = { name: key };
+        
+        if (typeof value === 'number') {
+          item.value = value;
+        } else if (typeof value === 'object' && value !== null) {
+          Object.assign(item, value);
+        } else {
+          item.value = 1;
+          item.rawValue = value;
+        }
+        
+        return item;
+      });
+      return { items };
     } catch (error) {
       console.error("Error converting object:", error);
     }
   }
 
-  // Case 6: Fallback - return empty array dengan sample data
+  // Case 8: Fallback - return empty array dengan sample data
   console.warn("❌ No valid data structure found, using fallback");
   return {
     items: [
@@ -517,6 +870,244 @@ const validateAndFixAnalysisData = (data: any): any => {
     ],
     _fallback: true,
   };
+};
+
+// ==================== NETWORK VISUALIZATION COMPONENT ====================
+
+/**
+ * Komponen khusus untuk network visualization
+ */
+const NetworkVisualization = ({ data }: { data: any }) => {
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  
+  console.log("🔍 NetworkVisualization received data:", data);
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <Network className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p>Data tidak tersedia</p>
+        </div>
+      </div>
+    );
+  }
+
+  let nodes = [];
+  let links = [];
+
+  if (data.items && Array.isArray(data.items)) {
+    nodes = data.items;
+    links = data.links || [];
+  } else if (Array.isArray(data)) {
+    nodes = data;
+  } else if (data.nodes && Array.isArray(data.nodes)) {
+    nodes = data.nodes;
+    links = data.links || [];
+  } else if (data.data && Array.isArray(data.data)) {
+    nodes = data.data;
+    links = data.links || data.relationships || [];
+  }
+
+  console.log("📊 Processed nodes:", nodes.length);
+  console.log("🔗 Processed links:", links.length);
+
+  if (nodes.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <Network className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p>Tidak ada nodes untuk divisualisasikan</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Network Graph Visualization */}
+      <div className="relative h-96 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-dashed border-blue-200 overflow-hidden">
+        {/* Simple Network Visualization */}
+        <div className="absolute inset-0">
+          {nodes.map((node: any, index: number) => {
+            const angle = (index * 2 * Math.PI) / nodes.length;
+            const radius = Math.min(120, 80 + nodes.length * 5);
+            const x = 200 + radius * Math.cos(angle);
+            const y = 180 + radius * Math.sin(angle);
+            
+            const nodeColor = getNodeColor(node.type || node.group || 'default');
+            
+            return (
+              <div
+                key={node.id || `node-${index}`}
+                className="absolute w-10 h-10 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform shadow-md border-2 border-white"
+                style={{ 
+                  left: x, 
+                  top: y,
+                  backgroundColor: nodeColor,
+                  color: 'white'
+                }}
+                onClick={() => setSelectedNode(node)}
+                title={`${node.name || node.label || node.id}\nType: ${node.type || 'unknown'}`}
+              >
+                {getNodeInitial(node.name || node.label || node.id)}
+              </div>
+            );
+          })}
+
+          {/* Render links/connections */}
+          {links.map((link: any, index: number) => {
+            const sourceNode = nodes.find((n: any) => n.id === link.source || n.id === link.source?.id);
+            const targetNode = nodes.find((n: any) => n.id === link.target || n.id === link.target?.id);
+            
+            if (!sourceNode || !targetNode) return null;
+
+            const sourceIndex = nodes.indexOf(sourceNode);
+            const targetIndex = nodes.indexOf(targetNode);
+            
+            const sourceAngle = (sourceIndex * 2 * Math.PI) / nodes.length;
+            const targetAngle = (targetIndex * 2 * Math.PI) / nodes.length;
+            const radius = Math.min(120, 80 + nodes.length * 5);
+            
+            const sourceX = 200 + radius * Math.cos(sourceAngle);
+            const sourceY = 180 + radius * Math.sin(sourceAngle);
+            const targetX = 200 + radius * Math.cos(targetAngle);
+            const targetY = 180 + radius * Math.sin(targetAngle);
+
+            return (
+              <svg key={`link-${index}`} className="absolute inset-0 pointer-events-none">
+                <line
+                  x1={sourceX}
+                  y1={sourceY}
+                  x2={targetX}
+                  y2={targetY}
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  strokeDasharray={link.type === 'weak' ? "5,5" : "none"}
+                />
+              </svg>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="absolute bottom-2 left-2 bg-white/80 backdrop-blur-sm rounded-lg p-2 text-xs">
+          <div className="font-medium mb-1">Legend:</div>
+          <div className="flex items-center gap-1 mb-1">
+            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+            <span>Person</span>
+          </div>
+          <div className="flex items-center gap-1 mb-1">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span>Organization</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+            <span>Location</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Node Details */}
+      {selectedNode && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center justify-between">
+              <span>Node Details</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedNode(null)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <strong>Name:</strong> {selectedNode.name || selectedNode.label || selectedNode.id}
+                </div>
+                <div>
+                  <strong>Type:</strong> {selectedNode.type || 'unknown'}
+                </div>
+                <div>
+                  <strong>Value:</strong> {selectedNode.value || 'N/A'}
+                </div>
+                <div>
+                  <strong>Group:</strong> {selectedNode.group || 'N/A'}
+                </div>
+              </div>
+              {selectedNode.properties && (
+                <div>
+                  <strong>Properties:</strong>
+                  <pre className="text-xs mt-1 p-2 bg-white rounded border max-h-32 overflow-auto">
+                    {JSON.stringify(selectedNode.properties, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Network Statistics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="text-center">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold text-blue-600">{nodes.length}</div>
+            <div className="text-xs text-muted-foreground">Total Nodes</div>
+          </CardContent>
+        </Card>
+        <Card className="text-center">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold text-green-600">{links.length}</div>
+            <div className="text-xs text-muted-foreground">Connections</div>
+          </CardContent>
+        </Card>
+        <Card className="text-center">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold text-purple-600">
+              {nodes.filter((n: any) => n.type === 'person' || n.type === 'user').length}
+            </div>
+            <div className="text-xs text-muted-foreground">People</div>
+          </CardContent>
+        </Card>
+        <Card className="text-center">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold text-orange-600">
+              {nodes.filter((n: any) => n.type === 'organization' || n.type === 'company').length}
+            </div>
+            <div className="text-xs text-muted-foreground">Organizations</div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// Helper functions untuk network visualization
+const getNodeColor = (type: string): string => {
+  const colorMap: { [key: string]: string } = {
+    person: '#3b82f6',
+    user: '#3b82f6',
+    organization: '#10b981',
+    company: '#10b981',
+    location: '#8b5cf6',
+    place: '#8b5cf6',
+    document: '#f59e0b',
+    file: '#f59e0b',
+    concept: '#ef4444',
+    default: '#6b7280'
+  };
+  return colorMap[type] || colorMap.default;
+};
+
+const getNodeInitial = (name: string): string => {
+  if (!name) return '?';
+  return name.charAt(0).toUpperCase();
 };
 
 // ==================== VISUALIZATION RENDERER COMPONENT ====================
@@ -558,12 +1149,14 @@ const VisualizationRenderer = ({
           <div className="text-center">
             <BarChartIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p>Tidak ada data untuk divisualisasikan</p>
+            <p className="text-xs mt-2">Data points: 0</p>
           </div>
         </div>
       );
     }
 
     const firstItem = chartData[0];
+    
     const valueKeys = Object.keys(firstItem).filter(
       (key) =>
         key !== "name" &&
@@ -571,11 +1164,17 @@ const VisualizationRenderer = ({
         key !== "type" &&
         key !== "label" &&
         key !== "id" &&
-        key !== "description"
+        key !== "description" &&
+        key !== "quadrant" &&
+        key !== "timestamp" &&
+        (typeof firstItem[key] === "number" || 
+         (typeof firstItem[key] === "string" && !isNaN(Number(firstItem[key]))))
     );
 
+    const finalValueKeys = valueKeys.length > 0 ? valueKeys : ['value'];
+
     console.log("📊 Chart data:", chartData);
-    console.log("🔑 Value keys:", valueKeys);
+    console.log("🔑 Value keys:", finalValueKeys);
 
     const vizType = visualization.type as string;
 
@@ -590,7 +1189,7 @@ const VisualizationRenderer = ({
               <YAxis />
               <Tooltip />
               <Legend />
-              {valueKeys.map((key, index) => (
+              {finalValueKeys.map((key, index) => (
                 <Bar
                   key={key}
                   dataKey={key}
@@ -612,7 +1211,7 @@ const VisualizationRenderer = ({
               <YAxis />
               <Tooltip />
               <Legend />
-              {valueKeys.map((key, index) => (
+              {finalValueKeys.map((key, index) => (
                 <Line
                   key={key}
                   type="monotone"
@@ -627,11 +1226,17 @@ const VisualizationRenderer = ({
         );
 
       case "pie_chart":
+        const pieData = chartData.map((item, index) => ({
+          name: item.name || `Item ${index + 1}`,
+          value: item.value || item.count || 1,
+          ...item
+        }));
+
         return (
           <ResponsiveContainer width="100%" height={400}>
             <PieChart>
               <Pie
-                data={chartData}
+                data={pieData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -642,7 +1247,7 @@ const VisualizationRenderer = ({
                 fill="#8884d8"
                 dataKey="value"
               >
-                {chartData.map((entry, index) => (
+                {pieData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
                     fill={CHART_COLORS[index % CHART_COLORS.length]}
@@ -663,7 +1268,8 @@ const VisualizationRenderer = ({
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              {valueKeys.map((key, index) => (
+              <Legend />
+              {finalValueKeys.map((key, index) => (
                 <Area
                   key={key}
                   type="monotone"
@@ -679,6 +1285,14 @@ const VisualizationRenderer = ({
         );
 
       case "scatter_chart":
+      case "quadrant":
+        const scatterData = chartData.map(item => ({
+          x: item.x || item.position?.x || item.value || Math.random() * 100,
+          y: item.y || item.position?.y || (item.value ? item.value * 0.8 : Math.random() * 100),
+          name: item.name || item.label,
+          ...item
+        }));
+
         return (
           <ResponsiveContainer width="100%" height={400}>
             <ScatterChart>
@@ -686,7 +1300,10 @@ const VisualizationRenderer = ({
               <XAxis dataKey="x" type="number" name="X Axis" />
               <YAxis dataKey="y" type="number" name="Y Axis" />
               <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-              <Scatter data={chartData} fill={CHART_COLORS[0]} />
+              <Scatter 
+                data={scatterData} 
+                fill={CHART_COLORS[0]}
+              />
             </ScatterChart>
           </ResponsiveContainer>
         );
@@ -698,7 +1315,7 @@ const VisualizationRenderer = ({
               <PolarGrid />
               <PolarAngleAxis dataKey="subject" />
               <PolarRadiusAxis />
-              {valueKeys.map((key, index) => (
+              {finalValueKeys.map((key, index) => (
                 <Radar
                   key={key}
                   dataKey={key}
@@ -712,6 +1329,9 @@ const VisualizationRenderer = ({
           </ResponsiveContainer>
         );
 
+      case "network":
+        return <NetworkVisualization data={chartData} />;
+
       default:
         return (
           <ResponsiveContainer width="100%" height={400}>
@@ -721,29 +1341,17 @@ const VisualizationRenderer = ({
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="value" fill={CHART_COLORS[0]} />
-              <Line type="monotone" dataKey="value" stroke={CHART_COLORS[1]} />
+              <Bar dataKey={finalValueKeys[0] || "value"} fill={CHART_COLORS[0]} />
+              <Line 
+                type="monotone" 
+                dataKey={finalValueKeys[0] || "value"} 
+                stroke={CHART_COLORS[1]} 
+              />
             </ComposedChart>
           </ResponsiveContainer>
         );
     }
   };
-
-  const renderNetworkGraph = () => (
-    <div className="flex items-center justify-center h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-dashed border-blue-200">
-      <div className="text-center">
-        <Network className="w-12 h-12 mx-auto mb-2 text-blue-500" />
-        <p className="font-medium text-blue-800">Network Graph Visualization</p>
-        <p className="text-sm text-blue-600 mt-1">
-          {chartData.length} nodes akan ditampilkan di sini
-        </p>
-        <div className="mt-4 text-xs text-blue-500">
-          <p>Nodes: {chartData.length}</p>
-          <p>Connections: {Math.floor(chartData.length * 1.5)}</p>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderSWOTAnalysis = () => {
     const strengths = chartData.filter(
@@ -931,12 +1539,9 @@ const VisualizationRenderer = ({
           </div>
 
           <div className="mt-4">
-            {visualization.type === "network" && renderNetworkGraph()}
             {visualization.type === "swot" && renderSWOTAnalysis()}
             {visualization.type === "quadrant" && renderQuadrantAnalysis()}
-            {!["network", "swot", "quadrant"].includes(
-              visualization.type as string
-            ) && renderChart()}
+            {!["swot", "quadrant"].includes(visualization.type as string) && renderChart()}
           </div>
 
           <div className="space-y-3">
@@ -998,24 +1603,23 @@ interface AIQueryInputProps {
   onModelChange?: (model: string) => void;
 }
 
-const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
+interface AIQueryInputRef {
+  setMode: (mode: string) => void;
+  setPersona: (persona: string) => void;
+  setModel: () => void;
+  setQuery: (newQuery: string) => void;
+}
+
+const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>((props, ref) => {
   const [query, setQuery] = useState("");
-  const [selectedMode, setSelectedMode] = useState<keyof typeof MODE_CONFIG>(
-    (props.initialMode as keyof typeof MODE_CONFIG) || "visual"
-  );
+  const [selectedMode, setSelectedMode] = useState<string>(props.initialMode || "qa");
   const [isProcessing, setIsProcessing] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [selectedPersona, setSelectedPersona] = useState<
-    keyof typeof AI_PERSONAS
-  >((props.initialPersona as keyof typeof AI_PERSONAS) || "strategist");
+  const [selectedPersona, setSelectedPersona] = useState<string>(props.initialPersona || "analyst");
   const [showChat, setShowChat] = useState(true);
   const [error, setError] = useState("");
-  const [apiStatus, setApiStatus] = useState<
-    "disconnected" | "connected" | "error"
-  >("disconnected");
-  const [selectedModel, setSelectedModel] = useState<string>(
-    props.initialModel || "llama"
-  );
+  const [apiStatus, setApiStatus] = useState<"disconnected" | "connected" | "error">("disconnected");
+  const [selectedModel] = useState<string>("llama-3.3-70b-versatile");
 
   // Upload states
   const [isUploading, setIsUploading] = useState(false);
@@ -1054,33 +1658,15 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
       const sourcesArray = safeArray<any>(sources);
       return sourcesArray.map((source, index) => ({
         id: source.id || `source-${index}`,
-        content:
-          removeMarkdownBold(
-            source.content ||
-            source.data ||
-            source.text ||
-            "No content available"
-          ),
+        content: removeMarkdownBold(source.content || source.data || source.text || "No content available"),
         metadata: {
-          source:
-            source.metadata?.source ||
-            source.source ||
-            source.type ||
-            "Unknown Source",
+          source: source.metadata?.source || source.source || source.type || "Unknown Source",
           category: source.metadata?.category || source.category || "General",
-          classification:
-            source.metadata?.classification ||
-            source.classification ||
-            "Publik",
+          classification: source.metadata?.classification || source.classification || "Publik",
           date: source.metadata?.date || source.date,
           author: source.metadata?.author || source.author,
         },
-        score:
-          typeof source.score === "number"
-            ? source.score
-            : typeof source.enhanced_score === "number"
-            ? source.enhanced_score
-            : 0.8,
+        score: typeof source.score === "number" ? source.score : typeof source.enhanced_score === "number" ? source.enhanced_score : 0.8,
         type: source.type,
         relevance: source.relevance_category || source.relevance,
       }));
@@ -1092,26 +1678,23 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
 
   // Effect untuk sync initial values dari props
   useEffect(() => {
-    if (props.initialMode)
-      setSelectedMode(props.initialMode as keyof typeof MODE_CONFIG);
-    if (props.initialPersona)
-      setSelectedPersona(props.initialPersona as keyof typeof AI_PERSONAS);
-    if (props.initialModel) setSelectedModel(props.initialModel);
-  }, [props.initialMode, props.initialPersona, props.initialModel]);
+    if (props.initialMode) setSelectedMode(props.initialMode);
+    if (props.initialPersona) setSelectedPersona(props.initialPersona);
+  }, [props.initialMode, props.initialPersona]);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
-    setMode: (mode: keyof typeof MODE_CONFIG) => {
+    setMode: (mode: string) => {
       setSelectedMode(mode);
-      const newPersona = MODE_CONFIG[mode].persona;
+      const newPersona = getModeConfig(mode).persona;
       setSelectedPersona(newPersona);
       props.onPersonaChange?.(newPersona);
     },
-    setPersona: (persona: keyof typeof AI_PERSONAS) => {
+    setPersona: (persona: string) => {
       setSelectedPersona(persona);
     },
-    setModel: (model: string) => {
-      setSelectedModel(model);
+    setModel: () => {
+      // Tidak melakukan apa-apa karena model tetap
     },
     setQuery: (newQuery: string) => {
       setQuery(newQuery);
@@ -1119,167 +1702,31 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
   }));
 
   // Handler untuk mode change
-  const handleModeChange = (mode: keyof typeof MODE_CONFIG) => {
+  const handleModeChange = (mode: string) => {
     setSelectedMode(mode);
     props.onModeChange?.(mode);
-    const newPersona = MODE_CONFIG[mode].persona;
+    const newPersona = getModeConfig(mode).persona;
     setSelectedPersona(newPersona);
     props.onPersonaChange?.(newPersona);
   };
 
-  const handlePersonaChange = (persona: keyof typeof AI_PERSONAS) => {
+  const handlePersonaChange = (persona: string) => {
     setSelectedPersona(persona);
     props.onPersonaChange?.(persona);
   };
 
-  const handleModelChange = (model: string) => {
-    setSelectedModel(model);
-    props.onModelChange?.(model);
+  // Get mode configuration
+  const getModeConfig = (mode: string) => {
+    return MODE_CONFIG[mode] || MODE_CONFIG.qa;
   };
 
-  // Get token from localStorage
-  const getToken = () => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("accessToken") || "";
-    }
-    return "";
+  const getModeIcon = (mode: string) => {
+    const Icon = getModeConfig(mode).icon;
+    return <Icon className="w-3 h-3" />;
   };
 
-  // API Functions
-  const testConnection = async () => {
-    try {
-      console.log(`Testing connection to: ${BASE_URL}`);
-      const response = await fetch(`${BASE_URL}/health`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log("Health check response:", data);
-      return data.status === "healthy";
-    } catch (error) {
-      console.error("Health check failed:", error);
-      return false;
-    }
-  };
-
-  const advancedQuery = async (
-    question: string,
-    options: {
-      model?: string;
-      enable_classification?: boolean;
-      enable_tool_calling?: boolean;
-      enable_pii_masking?: boolean;
-      enable_security_scan?: boolean;
-      enable_formatting?: boolean;
-      persona?: string;
-      user_role?: string;
-    } = {}
-  ) => {
-    try {
-      const enhancedOptions = {
-        model: selectedModel,
-        enable_classification: true,
-        enable_tool_calling: true,
-        enable_pii_masking: true,
-        enable_security_scan: true,
-        enable_formatting: true,
-        persona: selectedPersona,
-        user_role: "analyst",
-        ...options,
-      };
-
-      console.log(`Sending enhanced query: "${question}" dengan fitur aktif`);
-
-      const token = getToken();
-      const response = await fetch(`${BASE_URL}/api/chat/advanced-query`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          question,
-          ...enhancedOptions,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Enhanced query failed: ${response.status}`, errorText);
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log(`Enhanced query successful`, data);
-      return data;
-    } catch (error) {
-      console.error("Enhanced query error:", error);
-      throw error;
-    }
-  };
-
-  const visualAnalysisQuery = async (
-    question: string,
-    analysis_type: string = "auto"
-  ) => {
-    try {
-      console.log(`🎨 Sending visual analysis query: "${question}"`);
-
-      const token = getToken();
-      const response = await fetch(`${BASE_URL}/api/chat/visual-analysis`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          question,
-          analysis_type,
-          model: selectedModel,
-          visualization_format: "chartjs",
-          enable_narrative: true,
-          debug: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `❌ Visual analysis failed: ${response.status}`,
-          errorText
-        );
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log(`✅ Visual analysis response:`, data);
-
-      // Enhanced data validation and transformation
-      if (data.analysis_results && Array.isArray(data.analysis_results)) {
-        data.analysis_results = data.analysis_results.map((analysis: any) => ({
-          ...analysis,
-          data: validateAndFixAnalysisData(analysis.data),
-        }));
-      }
-
-      if (data.visualization) {
-        data.visualization.data = validateAndFixAnalysisData(
-          data.visualization.data
-        );
-      }
-
-      return data;
-    } catch (error) {
-      console.error("❌ Visual analysis error:", error);
-      throw error;
-    }
+  const getModeColor = (mode: string) => {
+    return getModeConfig(mode).color;
   };
 
   // Initialize dengan welcome message
@@ -1287,7 +1734,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
     setChatHistory([
       {
         id: "1",
-        content: "Enhanced RAG System dengan Visual Analysis Ready! Semua fitur analisis visual dan naratif telah diaktifkan. Pilih mode Visual Analysis untuk memulai!",
+        content: "Groq Llama 3.3 70B Versatile RAG System Ready! Gunakan mode Enhanced Visual untuk analisis visual dengan data real.",
         role: "assistant",
         timestamp: new Date(),
       },
@@ -1330,7 +1777,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
         setChatHistory((prev) => [
           {
             id: "1",
-            content: "Semua Sistem Berjalan Optimal! Halo ada yang bisa saya bantu hari ini?",
+            content: "Halo ada yang bisa saya bantu?",
             role: "assistant",
             timestamp: new Date(),
           },
@@ -1338,203 +1785,191 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
         setError("");
       } else {
         setApiStatus("error");
-        setError(
-          `Tidak dapat terhubung ke backend di ${BASE_URL}. Pastikan server backend berjalan.`
-        );
+        setError(`Tidak dapat terhubung ke backend di ${BASE_URL}. Pastikan server backend berjalan.`);
       }
     } catch (error) {
       setApiStatus("error");
-      setError(
-        `Koneksi gagal: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      setError(`Koneksi gagal: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const testConnection = async (): Promise<boolean> => {
+    try {
+      console.log(`Testing connection to: ${BASE_URL}`);
+      const response = await fetch(`${BASE_URL}/api/chat/health`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("Health check response:", data);
+      return data.status === "healthy";
+    } catch (error) {
+      console.error("Health check failed:", error);
+      return false;
+    }
+  };
+
   const processQuery = async (userQuery: string): Promise<ChatMessage> => {
     const startTime = Date.now();
-
+  
     try {
-      let result;
-      if (selectedMode === "visual") {
-        result = await visualAnalysisQuery(userQuery);
+      let result: SmartQueryResponse;
+      
+      // Gunakan enhanced visual untuk mode visual, lainnya advanced query
+      if (selectedMode === "enhanced_visual") {
+        result = await enhancedVisualRequest(userQuery);
       } else {
-        result = await advancedQuery(userQuery);
+        const qaResult = await advancedQuery(userQuery, getAdvancedQueryOptions());
+        result = {
+          type: "text_response",
+          answer: qaResult.answer,
+          sources: qaResult.sources,
+          model: qaResult.model,
+        } as SmartQueryResponse;
       }
-
+  
       const processingTime = Date.now() - startTime;
       console.log("📊 Raw API Response:", result);
-
+  
       const transformedSources = transformSources(result.sources);
-
-      let transformedVisualization: VisualizationData | undefined;
+  
       let analysisResults: AnalysisResult[] = [];
-
-      try {
-        // Enhanced analysis results processing
-        if (result.analysis_results && Array.isArray(result.analysis_results)) {
-          analysisResults = result.analysis_results.map(
-            (analysis: any, index: number) => {
-              console.log(`📈 Processing analysis ${index}:`, analysis);
-
-              const fixedData = validateAndFixAnalysisData(analysis.data);
-              console.log(`✅ Fixed data for analysis ${index}:`, fixedData);
-
-              return {
-                type: analysis.type || "chart",
-                title: analysis.title || `Analysis ${index + 1}`,
-                data: fixedData,
-                narrative: removeMarkdownBold(analysis.narrative || ''),
-                insights: safeArray<string>(analysis.insights).map(insight => removeMarkdownBold(insight)),
-                recommendations: safeArray<string>(analysis.recommendations).map(rec => removeMarkdownBold(rec)),
-              };
-            }
-          );
-        }
-        // Enhanced visualization processing
-        else if (
-          result.visualization &&
-          typeof result.visualization === "object"
-        ) {
-          console.log(
-            "🎨 Processing direct visualization:",
-            result.visualization
-          );
-
-          const fixedData = validateAndFixAnalysisData(
-            result.visualization.data
-          );
-          console.log("✅ Fixed visualization data:", fixedData);
-
-          transformedVisualization = {
-            type: result.visualization.type || "bar_chart",
-            data: fixedData,
+      let transformedVisualization: EnhancedVisualizationData | undefined;
+  
+      if (result.type === "visual_analysis" && result.visualization) {
+        const fixedData = validateAndFixAnalysisData(result.visualization.data || result.visualization);
+        
+        transformedVisualization = {
+          ...result.visualization,
+          data: fixedData,
+          intent_analysis: result.intent_analysis,
+          data_summary: result.data_summary,
+          metadata: {
+            data_source: result.data_source || "generated_data",
+            is_real_data: result.is_real_data || false,
+            generated_at: result.metadata?.generated_at || new Date().toISOString(),
+            real_data_sources: result.metadata?.real_data_sources || [],
+          },
+          suggestions: result.suggestions || [],
+        };
+  
+        analysisResults = [
+          {
+            type: result.visualization.type || "chart",
             title: result.visualization.title || "Visual Analysis",
-            description: removeMarkdownBold(result.visualization.description || ''),
-            narrative: removeMarkdownBold(result.visualization.narrative || ''),
-            insights: safeArray<string>(result.visualization.insights).map(insight => removeMarkdownBold(insight)),
-            recommendations: safeArray<string>(
-              result.visualization.recommendations
-            ).map(rec => removeMarkdownBold(rec)),
-          };
-
-          analysisResults = [
-            {
-              type: result.visualization.type || "chart",
-              title: result.visualization.title || "Visual Analysis",
-              data: fixedData,
-              narrative: removeMarkdownBold(result.visualization.narrative || ''),
-              insights: safeArray<string>(result.visualization.insights).map(insight => removeMarkdownBold(insight)),
-              recommendations: safeArray<string>(
-                result.visualization.recommendations
-              ).map(rec => removeMarkdownBold(rec)),
-            },
-          ];
-        }
-        // Enhanced root level data processing
-        else if (result.data || result.items) {
-          console.log("🔍 Found data at root level:", {
-            data: result.data,
-            items: result.items,
-          });
-
-          const fixedData = validateAndFixAnalysisData(result.data || result);
-          analysisResults = [
-            {
-              type: "chart",
-              title: "Data Analysis",
-              data: fixedData,
-              narrative: removeMarkdownBold(result.answer || "Analisis data"),
-              insights: [],
-              recommendations: [],
-            },
-          ];
-        }
-      } catch (vizError) {
-        console.error("❌ Error transforming visualization:", vizError);
-
-        // Enhanced fallback analysis
-        analysisResults = [
-          {
-            type: "bar_chart",
-            title: "Sample Analysis",
-            data: {
-              items: [
-                { name: "Data 1", value: 30, category: "A" },
-                { name: "Data 2", value: 45, category: "B" },
-                { name: "Data 3", value: 60, category: "C" },
-                { name: "Data 4", value: 25, category: "A" },
-                { name: "Data 5", value: 80, category: "B" },
-              ],
-            },
-            narrative:
-              "Menampilkan data sample karena terjadi error dalam pemrosesan data asli.",
-            insights: ["Data sample digunakan untuk demonstrasi"],
-            recommendations: ["Periksa koneksi API", "Validasi format data"],
+            data: fixedData,
+            narrative: removeMarkdownBold(result.narrative || result.visualization.narrative || ''),
+            insights: result.visualization.insights || [],
+            recommendations: result.visualization.recommendations || [],
           },
         ];
-      }
-
-      // Enhanced analysis results validation
-      if (analysisResults.length === 0 && result.answer) {
-        console.log("⚠️ No analysis results, creating from answer");
+      } else if (result.analysis_results && result.analysis_results.length > 0) {
+        analysisResults = result.analysis_results.map((analysis: any) => ({
+          type: analysis.type || "analysis",
+          title: analysis.title || `Analysis ${analysis.type}`,
+          data: validateAndFixAnalysisData(analysis.data || analysis.structure || analysis),
+          narrative: analysis.narrative || result.narrative,
+          insights: analysis.insights || [],
+          recommendations: analysis.recommendations || [],
+          structure: analysis.structure,
+          analysis: analysis.analysis,
+          metadata: analysis.metadata
+        }));
+        
+        const firstAnalysis = analysisResults[0];
+        transformedVisualization = {
+          type: firstAnalysis.type,
+          data: firstAnalysis.data,
+          title: firstAnalysis.title,
+          description: firstAnalysis.narrative,
+          narrative: firstAnalysis.narrative,
+          insights: firstAnalysis.insights,
+          recommendations: firstAnalysis.recommendations,
+          metadata: {
+            data_source: result.data_source || "real_data",
+            is_real_data: result.is_real_data || true,
+            generated_at: result.metadata?.generated_at || new Date().toISOString(),
+            real_data_sources: result.metadata?.real_data_sources || [],
+          }
+        };
+      } else if (result.type === "text_response" && result.answer) {
         analysisResults = [
           {
-            type: "bar_chart",
-            title: "Text Analysis",
-            data: {
-              items: [
-                { name: "Response", value: 100, category: "AI" },
-                { name: "Query", value: 80, category: "User" },
-              ],
-            },
+            type: "text",
+            title: "AI Response",
+            data: { items: [] },
             narrative: removeMarkdownBold(result.answer),
-            insights: ["Response AI berhasil di-generate"],
-            recommendations: [
-              "Gunakan query yang lebih spesifik untuk visualisasi",
-            ],
+            insights: ["Response berhasil di-generate"],
+            recommendations: ["Gunakan query yang lebih spesifik untuk visualisasi"],
           },
         ];
       }
-
+  
       const responseData: ChatMessage = {
         id: Date.now().toString(),
         content: removeMarkdownBold(
           result.answer ||
-          result.response ||
-          "Tidak ada respons yang dihasilkan."
+          result.narrative ||
+          result.visualization?.narrative ||
+          "Analisis berhasil di-generate."
         ),
-        role: "assistant" as const,
+        role: "assistant",
         timestamp: new Date(),
         sources: transformedSources,
         visualization: transformedVisualization,
-        modelUsed: result.model || selectedModel,
-        confidence:
-          typeof result.confidence === "number"
-            ? result.confidence
-            : result.enhanced_metadata?.confidence_score || 75,
+        modelUsed: result.model || "llama-3.3-70b-versatile",
+        confidence: result.intent_analysis?.confidence || result.enhanced_metadata?.confidence_score || 75,
         processingTime,
-        enhanced_metadata: result.enhanced_metadata,
-        recommendations: safeArray(result.recommendations),
-        advanced_reasoning: result.advanced_reasoning,
-        retrieval_metadata: result.retrieval_metadata,
-        security_level: result.enhanced_metadata?.security_level,
         analysis_results: analysisResults,
+        enhanced_metadata: {
+          query_type: result.type,
+          data_source: result.data_source || "generated_data",
+          is_real_data: result.is_real_data || false,
+          data_points: result.data_summary?.data_points || result.enhanced_metadata?.data_points || 0,
+          visualization_type: result.visualization?.type,
+          data_generated: result.data_summary?.generated_data || false,
+          real_data_confidence: result.data_summary?.confidence,
+          suggestions: result.suggestions,
+          analysis_type: result.enhanced_metadata?.analysis_type,
+          processing_steps: result.enhanced_metadata?.processing_steps,
+          total_processing_time: result.enhanced_metadata?.total_processing_time,
+          confidence_score: result.enhanced_metadata?.confidence_score,
+          visual_quality: result.enhanced_metadata?.visual_quality,
+        },
       };
-
+  
       console.log("✅ Final response data:", responseData);
-
+  
       if (props.onProcessComplete) {
         props.onProcessComplete(responseData);
       }
-
+  
       return responseData;
     } catch (error) {
       console.error("❌ Error processing query:", error);
       throw error;
+    }
+  };
+
+  const getAdvancedQueryOptions = () => {
+    switch (selectedMode) {
+      case "summary":
+        return { enable_summarization: true };
+      case "ide":
+        return { enable_ideation: true };
+      case "risk":
+        return { enable_risk_analysis: true };
+      default:
+        return {};
     }
   };
 
@@ -1601,9 +2036,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
       setUploadProgress(100);
 
       if (result.success) {
-        setUploadSuccess(
-          `${result.data.successful} file berhasil diupload!`
-        );
+        setUploadSuccess(`${result.data.successful} file berhasil diupload!`);
         setTimeout(() => {
           setShowUploadModal(false);
           setUploadedFiles([]);
@@ -1663,34 +2096,72 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
 
   const handleProcess = async () => {
     if (!query.trim() || isProcessing) return;
-
+  
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       content: query,
       role: "user",
       timestamp: new Date(),
     };
-
+  
     setChatHistory((prev) => [...prev, userMessage]);
     setIsProcessing(true);
     setError("");
-
+  
     try {
+      let token;
+      try {
+        token = getToken();
+        console.log("🔐 Token validated successfully");
+      } catch (tokenError) {
+        console.error("❌ Token validation failed:", tokenError);
+        throw new Error("Anda perlu login terlebih dahulu. Silakan login untuk menggunakan fitur ini.");
+      }
+  
       const aiResponse = await processQuery(query);
       setChatHistory((prev) => [...prev, aiResponse]);
+      
     } catch (error) {
-      console.error("Error calling backend API:", error);
-      const errorMessage: ChatMessage = {
+      console.error("❌ Error in handleProcess:", error);
+      
+      let errorMessage = "Terjadi error yang tidak diketahui";
+      let shouldRedirectToLogin = false;
+  
+      if (error instanceof Error) {
+        if (error.message.includes("Token tidak ditemukan") || 
+            error.message.includes("Anda perlu login") ||
+            error.message.includes("Authorization header is required") ||
+            error.message.includes("401") ||
+            error.message.includes("Unauthorized")) {
+          
+          errorMessage = "❌ Session telah berakhir. Silakan login ulang.";
+          shouldRedirectToLogin = true;
+          
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+          
+        } else {
+          errorMessage = `❌ ${error.message}`;
+        }
+      }
+  
+      const errorMessageObj: ChatMessage = {
         id: Date.now().toString(),
-        content: `Maaf, terjadi error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        content: errorMessage,
         role: "assistant",
         timestamp: new Date(),
       };
-      setChatHistory((prev) => [...prev, errorMessage]);
-      setError(error instanceof Error ? error.message : "Unknown error");
+      setChatHistory((prev) => [...prev, errorMessageObj]);
+      setError(errorMessage);
       setApiStatus("error");
+  
+      if (shouldRedirectToLogin) {
+        setTimeout(() => {
+          console.log("🔄 Redirecting to login page...");
+          window.location.href = "/login";
+        }, 3000);
+      }
     } finally {
       setIsProcessing(false);
       setQuery("");
@@ -1712,7 +2183,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
     setChatHistory([
       {
         id: "1",
-        content: "Percakapan telah dibersihkan. Enhanced RAG System dengan Visual Analysis siap digunakan!",
+        content: "Percakapan telah dibersihkan. Groq Llama 3.3 70B Versatile RAG System siap digunakan!",
         role: "assistant",
         timestamp: new Date(),
       },
@@ -1755,79 +2226,43 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
       case "error":
         return "Orchestrator System Error";
       default:
-        return "Connecting to Orchestrator...";
+        return "Connecting to Orchestrator";
     }
   };
 
   const getModelDisplayName = (model: string): string => {
-    return (
-      AVAILABLE_MODELS[model as keyof typeof AVAILABLE_MODELS]?.name || model
-    );
+    return AVAILABLE_MODELS[model as keyof typeof AVAILABLE_MODELS]?.name || model;
   };
 
   const getModelColor = (model: string): string => {
-    return (
-      AVAILABLE_MODELS[model as keyof typeof AVAILABLE_MODELS]?.color ||
-      "bg-gray-100 text-gray-700 border-gray-200"
-    );
+    return AVAILABLE_MODELS[model as keyof typeof AVAILABLE_MODELS]?.color || "bg-gray-100 text-gray-700 border-gray-200";
   };
 
   const getClassificationColor = (classification: string): string => {
-    return (
-      CLASSIFICATION_LEVELS[
-        classification as keyof typeof CLASSIFICATION_LEVELS
-      ]?.color || "bg-gray-100 text-gray-700 border-gray-200"
-    );
+    return CLASSIFICATION_LEVELS[classification as keyof typeof CLASSIFICATION_LEVELS]?.color || "bg-gray-100 text-gray-700 border-gray-200";
   };
 
   const getClassificationIcon = (classification: string) => {
-    const Icon =
-      CLASSIFICATION_LEVELS[
-        classification as keyof typeof CLASSIFICATION_LEVELS
-      ]?.icon || Shield;
+    const Icon = CLASSIFICATION_LEVELS[classification as keyof typeof CLASSIFICATION_LEVELS]?.icon || Shield;
     return <Icon className="w-3 h-3" />;
   };
 
   const getVisualizationIcon = (type: string) => {
-    const Icon =
-      VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.icon ||
-      FileBarChart;
+    const Icon = VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.icon || FileBarChart;
     return <Icon className="w-4 h-4" />;
   };
 
   const getVisualizationColor = (type: string) => {
-    return (
-      VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.color ||
-      "bg-gray-100 text-gray-700 border-gray-200"
-    );
+    return VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.color || "bg-gray-100 text-gray-700 border-gray-200";
   };
 
   const getVisualizationLabel = (type: string) => {
-    return (
-      VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.label ||
-      type
-    );
-  };
-
-  // Get mode configuration
-  const getModeConfig = (mode: string) => {
-    return MODE_CONFIG[mode as keyof typeof MODE_CONFIG] || MODE_CONFIG.qa;
-  };
-
-  const getModeIcon = (mode: string) => {
-    const Icon = getModeConfig(mode).icon;
-    return <Icon className="w-3 h-3" />;
-  };
-
-  const getModeColor = (mode: string) => {
-    return getModeConfig(mode).color;
+    return VISUALIZATION_TYPES[type as keyof typeof VISUALIZATION_TYPES]?.label || type;
   };
 
   // Komponen untuk menampilkan visual analysis dengan visualisasi otomatis
   const VisualAnalysisContent = ({ message }: { message: ChatMessage }) => {
-    const analyses =
-      message.analysis_results ||
-      (message.visualization ? [message.visualization] : []);
+    const analyses = message.analysis_results || (message.visualization ? [message.visualization] : []);
     const [selectedVizIndex, setSelectedVizIndex] = useState(0);
 
     if (!analyses || analyses.length === 0) {
@@ -1840,15 +2275,12 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
     }
 
     const currentAnalysis = analyses[selectedVizIndex];
-
-    // Safely extract properties from either VisualizationData or AnalysisResult
     const narrative = currentAnalysis.narrative;
     const insights = currentAnalysis.insights || [];
     const recommendations = currentAnalysis.recommendations || [];
 
     return (
       <div className="space-y-6">
-        {/* Analysis Selector untuk multiple visualizations */}
         {analyses.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-2">
             {analyses.map((analysis: any, index: number) => (
@@ -1866,7 +2298,6 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
           </div>
         )}
 
-        {/* Auto-generated Visualization */}
         <VisualizationRenderer
           visualization={{
             type: currentAnalysis.type || "chart",
@@ -1876,9 +2307,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
           }}
         />
 
-        {/* Insights and Recommendations */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          {/* Insights */}
           {insights.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
@@ -1889,20 +2318,17 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {safeArray<string>(insights).map(
-                    (insight: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <Sparkles className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span>{removeMarkdownBold(insight)}</span>
-                      </li>
-                    )
-                  )}
+                  {safeArray<string>(insights).map((insight: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <Sparkles className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                      <span>{removeMarkdownBold(insight)}</span>
+                    </li>
+                  ))}
                 </ul>
               </CardContent>
             </Card>
           )}
 
-          {/* Recommendations */}
           {recommendations.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
@@ -1913,14 +2339,12 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {safeArray<string>(recommendations).map(
-                    (rec: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                        <span>{removeMarkdownBold(rec)}</span>
-                      </li>
-                    )
-                  )}
+                  {safeArray<string>(recommendations).map((rec: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                      <span>{removeMarkdownBold(rec)}</span>
+                    </li>
+                  ))}
                 </ul>
               </CardContent>
             </Card>
@@ -1934,14 +2358,14 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
   const MessageContent = ({ message }: { message: ChatMessage }) => {
     const hasSources = message.sources && message.sources.length > 0;
     const hasVisualization = message.analysis_results || message.visualization;
-
-    // Sources Content yang ringkas
+    const queryType = message.enhanced_metadata?.query_type;
+  
     const SourcesContent = ({ sources }: { sources: Source[] }) => (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Search className="w-3 h-3 text-blue-500" />
           <span className="text-xs font-medium text-blue-700">
-            Keyword Sumber ({sources.length})
+            Sumber Referensi ({sources.length})
           </span>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -1950,10 +2374,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
               key={source.id}
               variant="secondary"
               className="text-xs bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 cursor-pointer"
-              title={`${source.metadata.source} - ${source.content.substring(
-                0,
-                100
-              )}...`}
+              title={`${source.metadata.source} - ${source.content.substring(0, 100)}...`}
             >
               {source.metadata.source}
               {source.score && (
@@ -1966,159 +2387,143 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
         </div>
       </div>
     );
+  
+    const MetadataContent = ({ message }: { message: ChatMessage }) => {
+      if (!message.enhanced_metadata) return null;
+    
+      return (
+        <div className="pt-4 border-t border-border/50 space-y-3">
+          {/* Advanced Visual Metadata */}
+          {message.enhanced_metadata.analysis_type === "social_network_analysis" && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Network className="w-4 h-4 text-purple-600" />
+                <span className="font-medium text-purple-800">Social Network Analysis</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <strong>Processing Steps:</strong>
+                  <ul className="text-xs mt-1 space-y-1">
+                    {message.enhanced_metadata.processing_steps?.map((step: string, index: number) => (
+                      <li key={index}>• {step}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <strong>Analysis Metrics:</strong>
+                  <div className="text-xs mt-1 space-y-1">
+                    <div>• Data Points: {message.enhanced_metadata.data_points}</div>
+                    <div>• Confidence: {message.enhanced_metadata.confidence_score}%</div>
+                    <div>• Quality: {message.enhanced_metadata.visual_quality}</div>
+                    <div>• Processing Time: {message.enhanced_metadata.total_processing_time}ms</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-    // Tampilkan konten berdasarkan mode yang dipilih
-    switch (selectedMode) {
-      case "visual":
+          <div className="flex items-center gap-3">
+            {message.enhanced_metadata.data_source === "real_data" ? (
+              <Badge variant="default" className="bg-green-100 text-green-700 border-green-200">
+                <Database className="w-3 h-3 mr-1" />
+                Real Data
+                {message.enhanced_metadata.real_data_confidence && (
+                  <span className="ml-1">({Math.round(message.enhanced_metadata.real_data_confidence * 100)}%)</span>
+                )}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
+                <Sparkles className="w-3 h-3 mr-1" />
+                AI-Generated Data
+              </Badge>
+            )}
+            
+            {message.enhanced_metadata.data_points && (
+              <Badge variant="outline" className="text-xs">
+                📊 {message.enhanced_metadata.data_points} data points
+              </Badge>
+            )}
+          </div>
+    
+          {message.enhanced_metadata.query_type && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                Type: {message.enhanced_metadata.query_type}
+              </Badge>
+            </div>
+          )}
+    
+          {message.visualization?.intent_analysis && (
+            <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <div className="font-medium text-yellow-800 mb-1">AI Analysis:</div>
+              <div className="text-yellow-700">
+                {message.visualization.intent_analysis.reasoning}
+              </div>
+              <div className="flex gap-2 mt-1">
+                <Badge variant="outline" className="text-xs">
+                  Confidence: {Math.round(message.visualization.intent_analysis.confidence * 100)}%
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Type: {message.visualization.intent_analysis.recommendedType}
+                </Badge>
+              </div>
+            </div>
+          )}
+    
+          {message.enhanced_metadata.suggestions && message.enhanced_metadata.suggestions.length > 0 && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+              <div className="font-medium text-blue-800 mb-1">Suggestions:</div>
+              <ul className="text-blue-700 space-y-1">
+                {message.enhanced_metadata.suggestions.map((suggestion: string, index: number) => (
+                  <li key={index}>• {suggestion}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    };
+  
+    switch (queryType) {
+      case "visual_analysis":
         return (
           <div className="space-y-6">
-            {/* Visual Analysis */}
             {hasVisualization && <VisualAnalysisContent message={message} />}
-
-            {/* Jawaban utama */}
-            <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
-              {removeMarkdownBold(message.content)}
-            </div>
-
-            {/* Sumber */}
+            <MetadataContent message={message} />
             {hasSources && (
               <div className="pt-4 border-t border-border/50">
                 <SourcesContent sources={message.sources!} />
-              </div>
-            )}
-
-            {/* Enhanced Features */}
-            {message.advanced_reasoning?.tools_employed && (
-              <div className="pt-4 border-t border-border/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Cpu className="w-4 h-4 text-green-500" />
-                  <span className="text-sm font-medium text-green-700">
-                    Tools Used:
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {safeArray<string>(
-                    message.advanced_reasoning.tools_employed
-                  ).map((tool: string, index: number) => (
-                    <Badge
-                      key={index}
-                      variant="secondary"
-                      className="text-xs bg-green-50 text-green-700"
-                    >
-                      {tool}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {message.security_level && (
-              <div className="pt-4 border-t border-border/50">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm font-medium text-orange-700">
-                    Level Keamanan:{" "}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      message.security_level === "very_high"
-                        ? "bg-red-100 text-red-700"
-                        : message.security_level === "high"
-                        ? "bg-orange-100 text-orange-700"
-                        : message.security_level === "medium"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-green-100 text-green-700"
-                    )}
-                  >
-                    {message.security_level === "very_high"
-                      ? "Sangat Tinggi"
-                      : message.security_level === "high"
-                      ? "Tinggi"
-                      : message.security_level === "medium"
-                      ? "Sedang"
-                      : "Standar"}
-                  </Badge>
-                </div>
               </div>
             )}
           </div>
         );
-
-      case "qa":
-      case "summary":
-      case "ide":
-      case "risk":
-      default:
+  
+      case "text_response":
         return (
           <div className="space-y-6">
-            {/* Jawaban utama */}
             <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
               {removeMarkdownBold(message.content)}
             </div>
-
-            {/* Sumber */}
+            <MetadataContent message={message} />
             {hasSources && (
               <div className="pt-4 border-t border-border/50">
                 <SourcesContent sources={message.sources!} />
               </div>
             )}
-
-            {/* Enhanced Features */}
-            {message.advanced_reasoning?.tools_employed && (
+          </div>
+        );
+  
+      default:
+        return (
+          <div className="space-y-6">
+            {hasVisualization && <VisualAnalysisContent message={message} />}
+            <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
+              {removeMarkdownBold(message.content)}
+            </div>
+            <MetadataContent message={message} />
+            {hasSources && (
               <div className="pt-4 border-t border-border/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Cpu className="w-4 h-4 text-green-500" />
-                  <span className="text-sm font-medium text-green-700">
-                    Tools Used:
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {safeArray<string>(
-                    message.advanced_reasoning.tools_employed
-                  ).map((tool: string, index: number) => (
-                    <Badge
-                      key={index}
-                      variant="secondary"
-                      className="text-xs bg-green-50 text-green-700"
-                    >
-                      {tool}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {message.security_level && (
-              <div className="pt-4 border-t border-border/50">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm font-medium text-orange-700">
-                    Level Keamanan:{" "}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      message.security_level === "very_high"
-                        ? "bg-red-100 text-red-700"
-                        : message.security_level === "high"
-                        ? "bg-orange-100 text-orange-700"
-                        : message.security_level === "medium"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-green-100 text-green-700"
-                    )}
-                  >
-                    {message.security_level === "very_high"
-                      ? "Sangat Tinggi"
-                      : message.security_level === "high"
-                      ? "Tinggi"
-                      : message.security_level === "medium"
-                      ? "Sedang"
-                      : "Standar"}
-                  </Badge>
-                </div>
+                <SourcesContent sources={message.sources!} />
               </div>
             )}
           </div>
@@ -2159,9 +2564,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
               disabled={isProcessing}
               className="flex items-center gap-1"
             >
-              <RefreshCw
-                className={cn("w-4 h-4", isProcessing && "animate-spin")}
-              />
+              <RefreshCw className={cn("w-4 h-4", isProcessing && "animate-spin")} />
               Test
             </Button>
             <Button
@@ -2187,42 +2590,27 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Badge
-                  variant="default"
-                  className={cn("text-xs", getModelColor(selectedModel))}
-                >
+                <Badge variant="default" className={cn("text-xs", getModelColor(selectedModel))}>
                   {getModelDisplayName(selectedModel)}
                 </Badge>
                 <Badge variant="secondary" className="text-xs">
-                  {AI_PERSONAS[selectedPersona].name}
+                  {AI_PERSONAS[selectedPersona as keyof typeof AI_PERSONAS]?.name || "Analyst"}
                 </Badge>
-                <Badge
-                  variant="outline"
-                  className={cn("text-xs", getModeColor(selectedMode))}
-                >
+                <Badge variant="outline" className={cn("text-xs", getModeColor(selectedMode))}>
                   {getModeIcon(selectedMode)}
                   {getModeConfig(selectedMode).name}
                 </Badge>
 
                 <div className="flex items-center gap-1">
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-blue-50 text-blue-700 border-blue-200"
-                  >
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
                     <Filter className="w-3 h-3 mr-1" />
                     Classification
                   </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-green-50 text-green-700 border-green-200"
-                  >
+                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
                     <Cpu className="w-3 h-3 mr-1" />
                     Tools
                   </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-orange-50 text-orange-700 border-orange-200"
-                  >
+                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
                     <Shield className="w-3 h-3 mr-1" />
                     Security
                   </Badge>
@@ -2267,9 +2655,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                         key={message.id}
                         className={cn(
                           "flex gap-3",
-                          message.role === "user"
-                            ? "justify-end"
-                            : "justify-start"
+                          message.role === "user" ? "justify-end" : "justify-start"
                         )}
                       >
                         {message.role === "assistant" && (
@@ -2295,13 +2681,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                               {message.modelUsed && (
                                 <>
                                   <span>•</span>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "text-xs",
-                                      getModelColor(message.modelUsed)
-                                    )}
-                                  >
+                                  <Badge variant="outline" className={cn("text-xs", getModelColor(message.modelUsed))}>
                                     {getModelDisplayName(message.modelUsed)}
                                   </Badge>
                                 </>
@@ -2313,12 +2693,11 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                                   {message.processingTime}ms
                                 </span>
                               )}
-                              {message.role === "assistant" &&
-                                message.confidence && (
-                                  <span className="font-medium">
-                                    {message.confidence}% confidence
-                                  </span>
-                                )}
+                              {message.role === "assistant" && message.confidence && (
+                                <span className="font-medium">
+                                  {message.confidence}% confidence
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -2348,53 +2727,27 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <div className="flex space-x-1.5">
                                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                                <div
-                                  className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                                  style={{ animationDelay: "0.1s" }}
-                                ></div>
-                                <div
-                                  className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                                  style={{ animationDelay: "0.2s" }}
-                                ></div>
+                                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
+                                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
                               </div>
-                              {selectedMode === "visual"
-                                ? "Memproses Visual Analysis..."
-                                : "Memproses Jawaban..."}
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-xs ml-2",
-                                  getModelColor(selectedModel)
-                                )}
-                              >
+                              {selectedMode === "enhanced_visual" ? "Memproses Enhanced Visual Analysis..." : "Memproses Jawaban..."}
+                              <Badge variant="outline" className={cn("text-xs ml-2", getModelColor(selectedModel))}>
                                 {getModelDisplayName(selectedModel)}
                               </Badge>
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-blue-50 text-blue-700"
-                              >
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
                                 Classification
                               </Badge>
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-green-50 text-green-700"
-                              >
+                              <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
                                 Tool Calling
                               </Badge>
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-orange-50 text-orange-700"
-                              >
+                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700">
                                 Security
                               </Badge>
-                              {selectedMode === "visual" && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs bg-purple-50 text-purple-700"
-                                >
-                                  Visual Analysis
+                              {selectedMode === "enhanced_visual" && (
+                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                                  Enhanced Visual Analysis
                                 </Badge>
                               )}
                             </div>
@@ -2426,7 +2779,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
 
             {/* Template Queries */}
             <div className="grid grid-cols-2 gap-2">
-              {QUERY_TEMPLATES[selectedMode]
+              {(QUERY_TEMPLATES[selectedMode] || [])
                 .slice(0, 2)
                 .map((template, index) => (
                   <Button
@@ -2445,13 +2798,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
 
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <Select
-                value={selectedMode}
-                onValueChange={(value: keyof typeof MODE_CONFIG) =>
-                  handleModeChange(value)
-                }
-                disabled={isProcessing}
-              >
+              <Select value={selectedMode} onValueChange={handleModeChange} disabled={isProcessing}>
                 <SelectTrigger className="w-28 h-7 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -2470,13 +2817,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                 </SelectContent>
               </Select>
 
-              <Select
-                value={selectedPersona}
-                onValueChange={(value: keyof typeof AI_PERSONAS) =>
-                  handlePersonaChange(value)
-                }
-                disabled={isProcessing}
-              >
+              <Select value={selectedPersona} onValueChange={handlePersonaChange} disabled={isProcessing}>
                 <SelectTrigger className="w-28 h-7 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -2495,30 +2836,11 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                 </SelectContent>
               </Select>
 
-              <Select
-                value={selectedModel}
-                onValueChange={(value: string) => handleModelChange(value)}
-                disabled={isProcessing}
-              >
-                <SelectTrigger className="w-32 h-7 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AVAILABLE_MODELS).map(
-                    ([modelKey, modelInfo]) => {
-                      const Icon = modelInfo.icon;
-                      return (
-                        <SelectItem key={modelKey} value={modelKey}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="w-3 h-3" />
-                            <span className="text-xs">{modelInfo.name}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    }
-                  )}
-                </SelectContent>
-              </Select>
+              {/* Model Selector - Hanya menampilkan satu model */}
+              <div className="flex items-center gap-2 px-2 py-1 border rounded-md bg-purple-50 text-purple-700 border-purple-200">
+                <Rocket className="w-3 h-3" />
+                <span className="text-xs font-medium">Llama 3.3 70B</span>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -2705,9 +3027,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cybersecurity">
-                        Cybersecurity
-                      </SelectItem>
+                      <SelectItem value="cybersecurity">Cybersecurity</SelectItem>
                       <SelectItem value="technology">Technology</SelectItem>
                       <SelectItem value="business">Business</SelectItem>
                       <SelectItem value="general">General</SelectItem>
@@ -2721,9 +3041,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                   <label className="text-sm font-medium">Klasifikasi</label>
                   <Select
                     value={uploadMetadata.classification}
-                    onValueChange={(
-                      value: keyof typeof CLASSIFICATION_LEVELS
-                    ) =>
+                    onValueChange={(value: keyof typeof CLASSIFICATION_LEVELS) =>
                       setUploadMetadata((prev) => ({
                         ...prev,
                         classification: value,
@@ -2735,23 +3053,18 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(CLASSIFICATION_LEVELS).map(
-                        ([key, level]) => (
-                          <SelectItem key={key} value={key}>
-                            <div className="flex items-center gap-2">
-                              {getClassificationIcon(key)}
-                              <span>{level.name}</span>
-                            </div>
-                          </SelectItem>
-                        )
-                      )}
+                      {Object.entries(CLASSIFICATION_LEVELS).map(([key, level]) => (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            {getClassificationIcon(key)}
+                            <span>{level.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {
-                      CLASSIFICATION_LEVELS[uploadMetadata.classification]
-                        ?.description
-                    }
+                    {CLASSIFICATION_LEVELS[uploadMetadata.classification]?.description}
                   </p>
                 </div>
 
@@ -2794,9 +3107,7 @@ const AIQueryInput = forwardRef((props: AIQueryInputProps, ref) => {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        const input = document.querySelector(
-                          'input[placeholder="Tambahkan tag..."]'
-                        ) as HTMLInputElement;
+                        const input = document.querySelector('input[placeholder="Tambahkan tag..."]') as HTMLInputElement;
                         if (input && input.value.trim()) {
                           addTag(input.value);
                           input.value = "";

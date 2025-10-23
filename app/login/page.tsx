@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { apiClient } from "@/lib/api";
 
 interface LoginResponse {
   success: boolean;
@@ -19,9 +20,18 @@ interface LoginResponse {
       accessToken: string;
       refreshToken: string;
       expiresIn: string;
+      expiresAt?: string;
+      remainingTime?: number;
     };
   };
   timestamp: string;
+}
+
+interface TokenInfo {
+  expiresAt: string;
+  remainingTime: number;
+  isExpiringSoon: boolean;
+  expiresIn: string;
 }
 
 export default function LoginPage() {
@@ -34,11 +44,199 @@ export default function LoginPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  
+  // Auto refresh references
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [tokenExpiry, setTokenExpiry] = useState<number | null>(null);
+  const [remainingTime, setRemainingTime] = useState<number | null>(null);
 
-  // Jika sudah login, langsung redirect
+  // Log environment info pada mount
+  useEffect(() => {
+    apiClient.logBaseUrl();
+  }, []);
+
+  // Clear semua intervals
+  const clearAllIntervals = () => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+    if (tokenCheckIntervalRef.current) {
+      clearInterval(tokenCheckIntervalRef.current);
+      tokenCheckIntervalRef.current = null;
+    }
+  };
+
+  // Refresh token function
+  const refreshToken = async (): Promise<boolean> => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
+      }
+
+      const data = await apiClient.refreshToken(refreshToken);
+
+      if (!data.success) {
+        throw new Error(data.error || "Token refresh failed");
+      }
+
+      // Update access token
+      const { accessToken, expiresAt, remainingTime } = data.data;
+      localStorage.setItem("accessToken", accessToken);
+      
+      // Update expiry info
+      if (expiresAt) {
+        const expiryTime = new Date(expiresAt).getTime();
+        setTokenExpiry(expiryTime);
+      }
+      
+      if (remainingTime) {
+        setRemainingTime(remainingTime);
+      }
+
+      console.log("🔄 Token refreshed successfully");
+      return true;
+    } catch (error) {
+      console.error("❌ Token refresh failed:", error);
+      handleAutoLogout();
+      return false;
+    }
+  };
+
+  // Quick refresh token (optimized)
+  const quickRefreshToken = async (): Promise<boolean> => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
+      }
+
+      const data = await apiClient.quickRefresh(refreshToken);
+
+      if (!data.success) {
+        throw new Error(data.error || "Quick refresh failed");
+      }
+
+      const { accessToken, remainingTime } = data.data;
+      localStorage.setItem("accessToken", accessToken);
+      
+      if (remainingTime) {
+        setRemainingTime(remainingTime);
+      }
+
+      console.log("⚡ Quick token refresh - Remaining:", remainingTime, "s");
+      return true;
+    } catch (error) {
+      console.error("❌ Quick refresh failed:", error);
+      return false;
+    }
+  };
+
+  // Verify token dan get info
+  const verifyToken = async (): Promise<TokenInfo | null> => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return null;
+
+      const data = await apiClient.verifyToken();
+
+      if (!data.success) {
+        throw new Error("Token verification failed");
+      }
+
+      return data.data.tokenInfo;
+    } catch (error) {
+      console.error("❌ Token verification failed:", error);
+      return null;
+    }
+  };
+
+  // Setup auto refresh system
+  const setupAutoRefresh = () => {
+    clearAllIntervals();
+
+    // Check token status setiap 30 detik
+    tokenCheckIntervalRef.current = setInterval(async () => {
+      const tokenInfo = await verifyToken();
+      
+      if (tokenInfo) {
+        setRemainingTime(tokenInfo.remainingTime);
+        
+        // Jika token akan expired dalam 1 menit, refresh
+        if (tokenInfo.remainingTime < 60 && tokenInfo.remainingTime > 0) {
+          console.log("🔄 Token expiring soon, refreshing...");
+          await quickRefreshToken();
+        }
+        
+        // Jika token sudah expired, try refresh
+        if (tokenInfo.remainingTime <= 0) {
+          console.log("🔄 Token expired, attempting refresh...");
+          await refreshToken();
+        }
+      }
+    }, 30000); // Check every 30 seconds
+
+    // Force refresh setiap 4 menit sebagai fallback
+    refreshIntervalRef.current = setInterval(async () => {
+      console.log("🔄 Scheduled token refresh");
+      await quickRefreshToken();
+    }, 4 * 60 * 1000); // 4 minutes
+  };
+
+  // Handle auto logout
+  const handleAutoLogout = () => {
+    clearAllIntervals();
+    
+    // Clear semua data auth
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    
+    // Show logout message
+    setMessage({
+      type: "error",
+      text: "Session expired. Please login again."
+    });
+    
+    console.log("🔒 Auto logout due to token expiration");
+    
+    // Redirect to login
+    router.replace("/");
+  };
+
+  // Effect untuk monitor token status
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (token) {
+      setupAutoRefresh();
+    }
+
+    return () => {
+      clearAllIntervals();
+    };
+  }, []);
+
+  // Effect untuk update remaining time display
+  useEffect(() => {
+    if (remainingTime !== null && remainingTime > 0) {
+      const interval = setInterval(() => {
+        setRemainingTime(prev => prev !== null ? Math.max(0, prev - 1) : null);
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [remainingTime]);
+
+  // Jika sudah login, langsung redirect dan setup auto refresh
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      console.log("✅ User already logged in, setting up auto refresh...");
+      setupAutoRefresh();
       router.replace("/analyst-workspace");
     }
   }, [router]);
@@ -47,36 +245,79 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setMessage(null);
-
+  
     try {
-      const res = await fetch("http://localhost:3002/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data: LoginResponse = await res.json();
-
-      if (!res.ok || !data.success)
+      console.log("🔧 Attempting login with API URL:", process.env.NEXT_PUBLIC_API_URL);
+      
+      const data: LoginResponse = await apiClient.login({ username, password });
+  
+      if (!data.success)
         throw new Error(data.message || "Login gagal");
-
-      // Simpan token & user
-      localStorage.setItem("accessToken", data.data.tokens.accessToken);
-      localStorage.setItem("refreshToken", data.data.tokens.refreshToken);
+  
+      // Simpan token & user dengan validation
+      const { accessToken, refreshToken, expiresAt, remainingTime } = data.data.tokens;
+      
+      if (!accessToken || !accessToken.startsWith("eyJ")) {
+        throw new Error("Token format invalid");
+      }
+  
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
       localStorage.setItem("user", JSON.stringify(data.data.user));
 
+      // Set expiry info
+      if (expiresAt) {
+        const expiryTime = new Date(expiresAt).getTime();
+        setTokenExpiry(expiryTime);
+      }
+      
+      if (remainingTime) {
+        setRemainingTime(remainingTime);
+      }
+  
+      // Verify storage
+      const storedToken = localStorage.getItem("accessToken");
+      if (storedToken !== accessToken) {
+        throw new Error("Failed to store token in localStorage");
+      }
+  
+      console.log("✅ Login successful, token expires in:", remainingTime, "seconds");
+  
       setMessage({
         type: "success",
         text: "Login berhasil! Mengalihkan ke workspace...",
       });
 
+      // Setup auto refresh system
+      setupAutoRefresh();
+  
       // Redirect setelah delay kecil
-      setTimeout(() => router.replace("/analyst-workspace"), 800);
+      setTimeout(() => {
+        router.replace("/analyst-workspace");
+      }, 800);
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Login gagal" });
+      // Clear any potentially corrupted tokens
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      clearAllIntervals();
+      
+      console.error("❌ Login error:", err);
+      setMessage({ 
+        type: "error", 
+        text: err.message || "Login gagal. Periksa koneksi atau credential Anda." 
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Format waktu untuk display
+  const formatTime = (seconds: number | null) => {
+    if (seconds === null) return "--:--";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -85,8 +326,24 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-8"
+        className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-8 relative"
       >
+        {/* Token Expiry Indicator */}
+        {remainingTime !== null && remainingTime > 0 && (
+          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+            <div className={`text-xs px-3 py-1 rounded-full border flex items-center gap-2 ${
+              remainingTime > 60 
+                ? "bg-green-100 text-green-800 border-green-200"
+                : "bg-yellow-100 text-yellow-800 border-yellow-200"
+            }`}>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                remainingTime > 60 ? "bg-green-500" : "bg-yellow-500"
+              }`}></div>
+              <span>Token: {formatTime(remainingTime)}</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto h-14 w-14 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-md">
@@ -105,7 +362,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h2 className="mt-4 text-2xl font-extrabold text-gray-900">
-            ASISGO CORE-SOVEREIGN
+            {process.env.NEXT_PUBLIC_APP_NAME || "ASISGO CORE-SOVEREIGN"}
           </h2>
           <p className="text-sm text-gray-600">
             Sign in to your Analyst Workspace
@@ -169,36 +426,14 @@ export default function LoginPage() {
             disabled={isLoading}
             className="w-full py-2 text-white font-medium rounded-md bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-60"
           >
-            {isLoading ? "Signing in..." : "Masuk ke Workspace"}
+            {isLoading ? "Signing in..." : "Login"}
           </button>
-
-          {/* Quick Login */}
-          {/* <div className="text-center text-sm text-gray-600">
-            Quick Login:
-            <div className="flex justify-center gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername("admin");
-                  setPassword("admin123");
-                }}
-                className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700"
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername("analyst");
-                  setPassword("admin123");
-                }}
-                className="px-3 py-1 bg-purple-600 text-white rounded-md text-xs hover:bg-purple-700"
-              >
-                Analyst
-              </button>
-            </div>
-          </div> */}
         </form>
+
+        {/* Security Notice */}
+        <div className="text-center text-xs text-gray-500 pt-4 border-t">
+          <p className="mt-1">{process.env.NEXT_PUBLIC_APP_NAME || "ASISGO CORE-SOVEREIGN"}</p>
+        </div>
       </motion.div>
     </div>
   );
