@@ -63,24 +63,16 @@ import {
   Rocket,
   Database,
   GitGraph,
-  NetworkIcon,
-  Map,
-  Link,
-  Nodes,
-  Share2,
-  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EnhancedOntologyContent } from "./ontology/ontology-visualizations";
-import { UniversalD3Visualization } from "./universal-d3-visualization";
+import { UniversalD3Visualization } from "./visualisasi/universal-d3-visualization";
 
-// ==================== HELPER FUNCTION ====================
 const removeMarkdownBold = (text: string): string => {
   if (!text) return "";
   return text.replace(/\*\*/g, "");
 };
 
-// ==================== TYPE DEFINITIONS ====================
 type VisualizationType =
   | "heatmap"
   | "timeline"
@@ -289,7 +281,7 @@ interface AnalysisResult {
   title: string;
   data: any;
   narrative?: string;
-  description?: string; // Tambahkan ini
+  description?: string;
   insights?: string[];
   recommendations?: string[];
   structure?: {
@@ -429,113 +421,77 @@ const CLASSIFICATION_LEVELS = {
   },
 };
 
-// ==================== QUERY TEMPLATES ====================
-const QUERY_TEMPLATES: { [key: string]: string[] } = {
-  qa: [
-    "Apa pola serangan siber yang paling umum pada kuartal ini?",
-    "Bagaimana tren ancaman terhadap infrastruktur kritis?",
-    "Siapa aktor ancaman utama yang teridentifikasi?",
-  ],
-  summary: [
-    "Buatkan ringkasan eksekutif laporan ancaman terkini",
-    "Summarize temuan utama dari analisis intelijen bulan ini",
-    "Buatkan poin-poin penting dari laporan keamanan siber",
-  ],
-  ide: [
-    "Generate ide-ide inovatif untuk meningkatkan deteksi ancaman",
-    "Brainstorm solusi kreatif untuk masalah keamanan cloud",
-    "Sarankan pendekatan baru untuk security awareness training",
-  ],
-  risk: [
-    "Monitor risiko keamanan siber terkini untuk organisasi kami",
-    "Analisis tingkat risiko dari kerentanan yang baru ditemukan",
-    "Identifikasi emerging threats yang perlu diprioritaskan",
-  ],
-  enhanced_visual: [
-    "Buat grafik penjualan berdasarkan data real",
-    "Analisis tren pengguna aktif dengan data aktual",
-    "Bandingkan performa produk menggunakan data real",
-  ],
-  ontology: [
-    "Buat knowledge graph dari data organisasi kami",
-    "Analisis hubungan entitas dalam sistem keamanan",
-    "Visualisasi jaringan hubungan antar aktor ancaman",
-    "Ekstrak ontology dari dokumen keamanan siber",
-    "Buat peta konsep dari laporan intelijen",
-  ],
-};
-
 // ==================== VISUALIZATION TYPE CONFIGURATIONS ====================
 const VISUALIZATION_TYPES = {
   network: {
     icon: Network,
     color: "bg-purple-100 text-purple-700 border-purple-200",
-    label: "Network Analysis",
+    label: "Analisis Jaringan",
   },
   timeline: {
     icon: LineChartIcon,
     color: "bg-blue-100 text-blue-700 border-blue-200",
-    label: "Timeline Analysis",
+    label: "Analisis Timeline",
   },
   bar_chart: {
     icon: BarChartIcon,
     color: "bg-green-100 text-green-700 border-green-200",
-    label: "Comparative Analysis",
+    label: "Analisis Perbandingan",
   },
   pie_chart: {
     icon: PieChartIcon,
     color: "bg-pink-100 text-pink-700 border-pink-200",
-    label: "Distribution Analysis",
+    label: "Analisis Distribusi",
   },
   area_chart: {
     icon: AreaChartIcon,
     color: "bg-teal-100 text-teal-700 border-teal-200",
-    label: "Trend Analysis",
+    label: "Analisis Tren",
   },
   scatter_chart: {
     icon: ScatterChartIcon,
     color: "bg-orange-100 text-orange-700 border-orange-200",
-    label: "Correlation Analysis",
+    label: "Analisis Korelasi",
   },
   radar_chart: {
     icon: RadarIcon,
     color: "bg-indigo-100 text-indigo-700 border-indigo-200",
-    label: "Radar Analysis",
+    label: "Analisis Radar",
   },
   quadrant: {
     icon: GitMerge,
     color: "bg-orange-100 text-orange-700 border-orange-200",
-    label: "Quadrant Analysis",
+    label: "Analisis Kuadran",
   },
   swot: {
     icon: Target,
     color: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    label: "SWOT Analysis",
+    label: "Analisis SWOT",
   },
   fishbone: {
     icon: FishSymbol,
     color: "bg-red-100 text-red-700 border-red-200",
-    label: "Root Cause Analysis",
+    label: "Analisis Akar Masalah",
   },
   causality: {
     icon: Workflow,
     color: "bg-cyan-100 text-cyan-700 border-cyan-200",
-    label: "Causal Analysis",
+    label: "Analisis Sebab-Akibat",
   },
   threat_matrix: {
     icon: AlertOctagon,
     color: "bg-gray-100 text-gray-700 border-gray-200",
-    label: "Threat Matrix",
+    label: "Matriks Ancaman",
   },
   knowledge_graph: {
     icon: GitGraph,
     color: "bg-indigo-100 text-indigo-700 border-indigo-200",
-    label: "Knowledge Graph",
+    label: "Graf Pengetahuan",
   },
   entity_network: {
-    icon: Nodes,
+    icon: Network,
     color: "bg-purple-100 text-purple-700 border-purple-200",
-    label: "Entity Network",
+    label: "Jaringan Entitas",
   },
 };
 
@@ -602,32 +558,32 @@ const MODE_CONFIG: {
 // ==================== ONTOLOGY MODE CONFIGURATIONS ====================
 const ONTOLOGY_MODES = {
   auto: {
-    name: "Auto Detect",
-    description: "Otomatis deteksi mode terbaik",
+    name: "Deteksi Otomatis",
+    description: "Sistem akan memilih mode terbaik secara otomatis",
     icon: Zap,
     color: "bg-blue-100 text-blue-700 border-blue-200",
   },
   extraction: {
-    name: "Entity Extraction",
-    description: "Ekstraksi entitas dan hubungan",
+    name: "Ekstraksi Entitas",
+    description: "Mengidentifikasi entitas dan hubungannya",
     icon: Network,
     color: "bg-green-100 text-green-700 border-green-200",
   },
   knowledge_graph: {
-    name: "Knowledge Graph",
-    description: "Visualisasi graph pengetahuan",
+    name: "Graf Pengetahuan",
+    description: "Membuat visualisasi hubungan pengetahuan",
     icon: GitGraph,
     color: "bg-purple-100 text-purple-700 border-purple-200",
   },
   comprehensive: {
-    name: "Comprehensive",
-    description: "Analisis ontology lengkap",
+    name: "Analisis Menyeluruh",
+    description: "Analisis lengkap dengan berbagai perspektif",
     icon: Brain,
     color: "bg-orange-100 text-orange-700 border-orange-200",
   },
   quick: {
-    name: "Quick Analysis",
-    description: "Analisis cepat dan ringkas",
+    name: "Analisis Cepat",
+    description: "Analisis cepat untuk insight langsung",
     icon: Rocket,
     color: "bg-yellow-100 text-yellow-700 border-yellow-200",
   },
@@ -643,16 +599,16 @@ const getToken = (): string => {
   const token = localStorage.getItem("accessToken");
   console.log(
     "🔐 Token retrieval:",
-    token ? `✅ Found (${token.substring(0, 20)}...)` : "❌ Missing"
+    token ? `✅ Ditemukan (${token.substring(0, 20)}...)` : "❌ Tidak ditemukan"
   );
 
   if (!token) {
-    console.error("❌ No access token found in localStorage");
+    console.error("❌ Token akses tidak ditemukan di localStorage");
     throw new Error("Token tidak ditemukan. Silakan login terlebih dahulu.");
   }
 
   if (!token.startsWith("eyJ") || token.length < 50) {
-    console.error("❌ Invalid token format");
+    console.error("❌ Format token tidak valid");
     localStorage.removeItem("accessToken");
     throw new Error("Token tidak valid. Silakan login ulang.");
   }
@@ -670,7 +626,7 @@ const ontologyRequest = async (
   try {
     const token = getToken();
     console.log(
-      `🧠 Mengirim ontology request ke: ${BASE_URL}/api/chat/ontology`
+      `🧠 Mengirim permintaan analisis hubungan ke: ${BASE_URL}/api/chat/ontology`
     );
 
     const response = await fetch(`${BASE_URL}/api/chat/ontology`, {
@@ -692,18 +648,18 @@ const ontologyRequest = async (
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `❌ Ontology request failed: ${response.status}`,
+        `❌ Permintaan analisis hubungan gagal: ${response.status}`,
         errorText
       );
       throw new Error(`Server error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`✅ Ontology response:`, data);
+    console.log(`✅ Respons analisis hubungan:`, data);
 
     return data;
   } catch (error) {
-    console.error("❌ Ontology request error:", error);
+    console.error("❌ Error permintaan analisis hubungan:", error);
     throw error;
   }
 };
@@ -718,7 +674,7 @@ const enhancedVisualRequest = async (
   try {
     const token = getToken();
     console.log(
-      `🤖 Mengirim enhanced visual request ke: ${BASE_URL}/api/chat/visual-analysis`
+      `🤖 Mengirim permintaan analisis visual ke: ${BASE_URL}/api/chat/visual-analysis`
     );
 
     const response = await fetch(`${BASE_URL}/api/chat/universal-visual`, {
@@ -739,33 +695,33 @@ const enhancedVisualRequest = async (
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `❌ Enhanced visual request failed: ${response.status}`,
+        `❌ Permintaan analisis visual gagal: ${response.status}`,
         errorText
       );
       throw new Error(`Server error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`✅ Enhanced visual response:`, data);
+    console.log(`✅ Respons analisis visual:`, data);
 
     return transformEnhancedVisualResponse(data);
   } catch (error) {
-    console.error("❌ Enhanced visual request error:", error);
+    console.error("❌ Error permintaan analisis visual:", error);
     throw error;
   }
 };
 
 const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
-  console.log("🔄 Transforming enhanced visual response:", data);
+  console.log("🔄 Mengubah respons analisis visual:", data);
 
   const defaultVisualizationData: EnhancedVisualizationData = {
     type: "fallback",
     data: { items: [] },
-    title: "Analysis Result",
-    description: "Hasil analisis", // Pastikan ada description
+    title: "Hasil Analisis",
+    description: "Hasil analisis berhasil di-generate",
     narrative: data.answer || data.narrative || "Analisis berhasil di-generate",
     insights: ["Analisis selesai"],
-    recommendations: ["Gunakan query yang lebih spesifik"],
+    recommendations: ["Coba gunakan pertanyaan yang lebih spesifik"],
     metadata: {
       data_source: "fallback",
       is_real_data: false,
@@ -784,7 +740,7 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
       ...data.visualization,
       data: fixedData,
       description:
-        data.visualization.description || data.narrative || "Visual Analysis", // Tambahkan fallback
+        data.visualization.description || data.narrative || "Analisis Visual",
       metadata: {
         data_source: data.data_source || "generated_data",
         is_real_data: data.is_real_data || false,
@@ -796,9 +752,9 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
     analysisResults = [
       {
         type: data.visualization.type || "visual_analysis",
-        title: data.visualization.title || "Visual Analysis",
+        title: data.visualization.title || "Analisis Visual",
         data: fixedData,
-        description: data.visualization.description || data.narrative, // Tambahkan description
+        description: data.visualization.description || data.narrative,
         narrative: data.narrative || data.visualization.narrative || "",
         insights: data.visualization.insights || [],
         recommendations: data.visualization.recommendations || [],
@@ -810,11 +766,13 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
     visualizationData = {
       type: "text",
       data: { items: [] },
-      title: "Text Analysis",
-      description: "Analisis teks",
+      title: "Analisis Teks",
+      description: "Analisis teks berhasil dilakukan",
       narrative: data.answer,
-      insights: ["Response berhasil di-generate"],
-      recommendations: ["Gunakan query yang lebih spesifik untuk visualisasi"],
+      insights: ["Respons berhasil di-generate"],
+      recommendations: [
+        "Gunakan pertanyaan yang lebih spesifik untuk visualisasi",
+      ],
       metadata: {
         data_source: "text_response",
         is_real_data: false,
@@ -826,12 +784,12 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
     analysisResults = [
       {
         type: "text_response",
-        title: "AI Response",
+        title: "Respons AI",
         data: { items: [] },
         narrative: data.answer,
-        insights: ["Response berhasil di-generate"],
+        insights: ["Respons berhasil di-generate"],
         recommendations: [
-          "Gunakan query yang lebih spesifik untuk visualisasi",
+          "Gunakan pertanyaan yang lebih spesifik untuk visualisasi",
         ],
       },
     ];
@@ -859,7 +817,7 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
       data.data_source || (data.is_real_data ? "real_data" : "generated_data"),
     is_real_data: data.is_real_data || false,
     suggestions: data.suggestions || [
-      "Gunakan query yang lebih spesifik untuk hasil yang lebih akurat",
+      "Gunakan pertanyaan yang lebih spesifik untuk hasil yang lebih akurat",
       "Coba mode analisis yang berbeda untuk perspektif lain",
     ],
     analysis_results: analysisResults,
@@ -874,7 +832,7 @@ const transformEnhancedVisualResponse = (data: any): SmartQueryResponse => {
     },
   };
 
-  console.log("✅ Transformed enhanced visual response:", response);
+  console.log("✅ Respons analisis visual berhasil diubah:", response);
   return response;
 };
 
@@ -897,7 +855,9 @@ const advancedQuery = async (question: string, options = {}): Promise<any> => {
       ...options,
     };
 
-    console.log(`📤 Mengirim query ke: ${BASE_URL}/api/chat/advanced-query`);
+    console.log(
+      `📤 Mengirim pertanyaan ke: ${BASE_URL}/api/chat/advanced-query`
+    );
 
     const response = await fetch(`${BASE_URL}/api/chat/advanced-query`, {
       method: "POST",
@@ -913,15 +873,15 @@ const advancedQuery = async (question: string, options = {}): Promise<any> => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Enhanced query failed: ${response.status}`, errorText);
+      console.error(`Query lanjutan gagal: ${response.status}`, errorText);
       throw new Error(`Server error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`Enhanced query successful`, data);
+    console.log(`Query lanjutan berhasil`, data);
     return data;
   } catch (error) {
-    console.error("Enhanced query error:", error);
+    console.error("Error query lanjutan:", error);
     throw error;
   }
 };
@@ -929,16 +889,16 @@ const advancedQuery = async (question: string, options = {}): Promise<any> => {
 // ==================== DATA VALIDATION & TRANSFORMATION ====================
 
 const validateAndFixAnalysisData = (data: any): any => {
-  console.log("🔧 Original data for visualization:", data);
+  console.log("🔧 Data asli untuk visualisasi:", data);
 
   if (!data) {
-    console.warn("❌ Data is null or undefined");
+    console.warn("❌ Data kosong atau tidak terdefinisi");
     return { items: [] };
   }
 
   // SPECIAL CASE: Network data
   if (data.type === "network" || data.visualizationType === "network") {
-    console.log("✅ Network data structure detected");
+    console.log("✅ Struktur data jaringan terdeteksi");
 
     if (data.items && data.links) {
       return data;
@@ -957,7 +917,7 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   // Case 1: Data dari VisualAnalysisService (format baru)
   if (data.data && data.data.datasets) {
-    console.log("✅ Chart.js format detected");
+    console.log("✅ Format Chart.js terdeteksi");
     const items =
       data.data.labels?.map((label: string, index: number) => {
         const item: any = { name: label };
@@ -975,13 +935,13 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   // Case 2: Data sudah dalam format yang benar { items: [...] }
   if (data.items && Array.isArray(data.items)) {
-    console.log("✅ Data already has items array");
+    console.log("✅ Data sudah memiliki array items");
     return data;
   }
 
   // Case 3: Data adalah array langsung
   if (Array.isArray(data)) {
-    console.log("✅ Data is direct array, wrapping in items");
+    console.log("✅ Data adalah array langsung, membungkus dalam items");
     return { items: data };
   }
 
@@ -991,7 +951,7 @@ const validateAndFixAnalysisData = (data: any): any => {
   );
 
   if (arrayKeys.length > 0) {
-    console.log(`✅ Found array keys:`, arrayKeys);
+    console.log(`✅ Kunci array ditemukan:`, arrayKeys);
 
     if (arrayKeys.includes("data")) {
       return { items: data.data };
@@ -1005,7 +965,7 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   // Case 5: Data dari quadrant analysis
   if (data.quadrants && typeof data.quadrants === "object") {
-    console.log("✅ Quadrant analysis data detected");
+    console.log("✅ Data analisis kuadran terdeteksi");
     const items: any[] = [];
     Object.values(data.quadrants).forEach((quadrant: any) => {
       if (Array.isArray(quadrant.items)) {
@@ -1024,7 +984,7 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   // Case 6: Data dari SWOT analysis
   if (data.factors && typeof data.factors === "object") {
-    console.log("✅ SWOT analysis data detected");
+    console.log("✅ Data analisis SWOT terdeteksi");
     const items: any[] = [];
     Object.entries(data.factors).forEach(
       ([category, factors]: [string, any]) => {
@@ -1034,7 +994,7 @@ const validateAndFixAnalysisData = (data: any): any => {
               name:
                 typeof factor === "string"
                   ? factor
-                  : factor.name || `Factor_${index}`,
+                  : factor.name || `Faktor_${index}`,
               value: 1,
               category: category,
               ...(typeof factor === "object" ? factor : {}),
@@ -1048,7 +1008,7 @@ const validateAndFixAnalysisData = (data: any): any => {
 
   // Case 7: Data adalah object biasa - convert ke array
   if (typeof data === "object") {
-    console.log("✅ Converting object to array");
+    console.log("✅ Mengubah object menjadi array");
     try {
       const values = Object.values(data);
       if (
@@ -1074,17 +1034,19 @@ const validateAndFixAnalysisData = (data: any): any => {
       });
       return { items };
     } catch (error) {
-      console.error("Error converting object:", error);
+      console.error("Error mengubah object:", error);
     }
   }
 
   // Case 8: Fallback - return empty array dengan sample data
-  console.warn("❌ No valid data structure found, using fallback");
+  console.warn(
+    "❌ Tidak ada struktur data yang valid ditemukan, menggunakan fallback"
+  );
   return {
     items: [
-      { name: "Sample 1", value: 30, category: "A" },
-      { name: "Sample 2", value: 45, category: "B" },
-      { name: "Sample 3", value: 60, category: "C" },
+      { name: "Contoh 1", value: 30, category: "A" },
+      { name: "Contoh 2", value: 45, category: "B" },
+      { name: "Contoh 3", value: 60, category: "C" },
     ],
     _fallback: true,
   };
@@ -1103,21 +1065,23 @@ const VisualizationRenderer = ({
   const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
-    console.log("🎯 Visualization data received:", visualization);
+    console.log("🎯 Data visualisasi diterima:", visualization);
 
     if (!visualization || !visualization.data) {
-      console.warn("❌ No visualization data available");
+      console.warn("❌ Tidak ada data visualisasi yang tersedia");
       setChartData([]);
       return;
     }
 
     const processedData = validateAndFixAnalysisData(visualization.data);
-    console.log("✅ Processed chart data:", processedData);
+    console.log("✅ Data chart yang diproses:", processedData);
 
     if (processedData.items && Array.isArray(processedData.items)) {
       setChartData(processedData.items);
     } else {
-      console.warn("❌ No items array found in processed data");
+      console.warn(
+        "❌ Tidak ada array items ditemukan dalam data yang diproses"
+      );
       setChartData([]);
     }
   }, [visualization]);
@@ -1168,7 +1132,7 @@ const OntologyOptionsModal = ({
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               <GitGraph className="w-5 h-5" />
-              Ontology Analysis Options
+              Opsi Analisis Hubungan
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-4 h-4" />
@@ -1179,7 +1143,7 @@ const OntologyOptionsModal = ({
         <CardContent className="space-y-4">
           {/* Mode Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Analysis Mode</label>
+            <label className="text-sm font-medium">Mode Analisis</label>
             <Select value={ontologyMode} onValueChange={setOntologyMode}>
               <SelectTrigger>
                 <SelectValue />
@@ -1205,7 +1169,7 @@ const OntologyOptionsModal = ({
 
           {/* Output Format */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Output Format</label>
+            <label className="text-sm font-medium">Format Output</label>
             <Select
               value={ontologyOptions.output_format}
               onValueChange={(
@@ -1221,17 +1185,17 @@ const OntologyOptionsModal = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="complete">Complete Analysis</SelectItem>
-                <SelectItem value="minimal">Minimal Output</SelectItem>
-                <SelectItem value="graph_only">Graph Only</SelectItem>
-                <SelectItem value="analysis_only">Analysis Only</SelectItem>
+                <SelectItem value="complete">Analisis Lengkap</SelectItem>
+                <SelectItem value="minimal">Output Minimal</SelectItem>
+                <SelectItem value="graph_only">Hanya Graf</SelectItem>
+                <SelectItem value="analysis_only">Hanya Analisis</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Analysis Depth */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Analysis Depth</label>
+            <label className="text-sm font-medium">Kedalaman Analisis</label>
             <Select
               value={ontologyOptions.analysis_depth}
               onValueChange={(value: "quick" | "standard" | "comprehensive") =>
@@ -1245,18 +1209,16 @@ const OntologyOptionsModal = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="quick">Quick Analysis</SelectItem>
-                <SelectItem value="standard">Standard Analysis</SelectItem>
-                <SelectItem value="comprehensive">
-                  Comprehensive Analysis
-                </SelectItem>
+                <SelectItem value="quick">Analisis Cepat</SelectItem>
+                <SelectItem value="standard">Analisis Standar</SelectItem>
+                <SelectItem value="comprehensive">Analisis Mendalam</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Options Checkboxes */}
           <div className="space-y-3">
-            <label className="text-sm font-medium">Options</label>
+            <label className="text-sm font-medium">Opsi</label>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <input
@@ -1272,7 +1234,7 @@ const OntologyOptionsModal = ({
                   className="rounded"
                 />
                 <label htmlFor="enable-visualization" className="text-sm">
-                  Enable Visualization
+                  Aktifkan Visualisasi
                 </label>
               </div>
             </div>
@@ -1280,7 +1242,7 @@ const OntologyOptionsModal = ({
 
           {/* Quick Actions */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Quick Presets</label>
+            <label className="text-sm font-medium">Preset Cepat</label>
             <div className="grid grid-cols-3 gap-2">
               <Button
                 variant="outline"
@@ -1295,7 +1257,7 @@ const OntologyOptionsModal = ({
                 }}
                 className="text-xs h-8"
               >
-                Auto
+                Otomatis
               </Button>
               <Button
                 variant="outline"
@@ -1310,7 +1272,7 @@ const OntologyOptionsModal = ({
                 }}
                 className="text-xs h-8"
               >
-                Deep Analysis
+                Analisis Mendalam
               </Button>
               <Button
                 variant="outline"
@@ -1325,7 +1287,7 @@ const OntologyOptionsModal = ({
                 }}
                 className="text-xs h-8"
               >
-                Quick
+                Cepat
               </Button>
             </div>
           </div>
@@ -1333,7 +1295,7 @@ const OntologyOptionsModal = ({
           {/* Current Settings Summary */}
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
             <h4 className="text-sm font-medium text-blue-800 mb-2">
-              Current Settings
+              Pengaturan Saat Ini
             </h4>
             <div className="space-y-1 text-xs text-blue-700">
               <div className="flex justify-between">
@@ -1352,17 +1314,15 @@ const OntologyOptionsModal = ({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Depth:</span>
+                <span>Kedalaman:</span>
                 <span className="font-medium">
                   {ontologyOptions.analysis_depth}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Visualization:</span>
+                <span>Visualisasi:</span>
                 <span className="font-medium">
-                  {ontologyOptions.enable_visualization
-                    ? "Enabled"
-                    : "Disabled"}
+                  {ontologyOptions.enable_visualization ? "Aktif" : "Nonaktif"}
                 </span>
               </div>
             </div>
@@ -1371,13 +1331,13 @@ const OntologyOptionsModal = ({
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={onClose} className="flex-1">
-              Cancel
+              Batal
             </Button>
             <Button
               onClick={onClose}
               className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700"
             >
-              Apply Settings
+              Terapkan Pengaturan
             </Button>
           </div>
         </CardContent>
@@ -1447,6 +1407,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
     });
     const [uploadError, setUploadError] = useState("");
     const [uploadSuccess, setUploadSuccess] = useState("");
+    const [showUploadSuccess, setShowUploadSuccess] = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1476,15 +1437,15 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
             source.content ||
               source.data ||
               source.text ||
-              "No content available"
+              "Tidak ada konten yang tersedia"
           ),
           metadata: {
             source:
               source.metadata?.source ||
               source.source ||
               source.type ||
-              "Unknown Source",
-            category: source.metadata?.category || source.category || "General",
+              "Sumber Tidak Dikenal",
+            category: source.metadata?.category || source.category || "Umum",
             classification:
               source.metadata?.classification ||
               source.classification ||
@@ -1502,7 +1463,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           relevance: source.relevance_category || source.relevance,
         }));
       } catch (error) {
-        console.error("Error transforming sources:", error);
+        console.error("Error mengubah sumber:", error);
         return [];
       }
     };
@@ -1566,7 +1527,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         {
           id: "1",
           content:
-            "Groq Llama 3.3 70B Versatile RAG System Ready! Gunakan mode Enhanced Visual untuk analisis visual dengan data real atau Ontology Analysis untuk knowledge graph.",
+            "Halo! Saya siap membantu Anda. Sistem Groq Llama 3.3 70B sudah aktif. Gunakan mode Analisis Visual untuk melihat data dalam bentuk grafik atau Analisis Hubungan untuk memahami koneksi antar informasi.",
           role: "assistant",
           timestamp: new Date(),
         },
@@ -1599,6 +1560,16 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
       }
     }, [query]);
 
+    // Effect untuk menghilangkan notifikasi upload success setelah 3 detik
+    useEffect(() => {
+      if (showUploadSuccess) {
+        const timer = setTimeout(() => {
+          setShowUploadSuccess(false);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [showUploadSuccess]);
+
     const testApiConnection = async () => {
       setIsProcessing(true);
       setError("");
@@ -1609,7 +1580,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           setChatHistory((prev) => [
             {
               id: "1",
-              content: "Halo ada yang bisa saya bantu?",
+              content: "Halo! Ada yang bisa saya bantu hari ini?",
               role: "assistant",
               timestamp: new Date(),
             },
@@ -1618,14 +1589,14 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         } else {
           setApiStatus("error");
           setError(
-            `Tidak dapat terhubung ke backend di ${BASE_URL}. Pastikan server backend berjalan.`
+            `Maaf, tidak dapat terhubung ke server backend di ${BASE_URL}. Pastikan server backend sedang berjalan.`
           );
         }
       } catch (error) {
         setApiStatus("error");
         setError(
           `Koneksi gagal: ${
-            error instanceof Error ? error.message : "Unknown error"
+            error instanceof Error ? error.message : "Error tidak diketahui"
           }`
         );
       } finally {
@@ -1635,7 +1606,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
 
     const testConnection = async (): Promise<boolean> => {
       try {
-        console.log(`Testing connection to: ${BASE_URL}`);
+        console.log(`Mengecek koneksi ke: ${BASE_URL}`);
         const response = await fetch(`${BASE_URL}/api/chat/health`, {
           method: "GET",
           headers: {
@@ -1648,10 +1619,10 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         }
 
         const data = await response.json();
-        console.log("Health check response:", data);
+        console.log("Respons health check:", data);
         return data.status === "healthy";
       } catch (error) {
-        console.error("Health check failed:", error);
+        console.error("Health check gagal:", error);
         return false;
       }
     };
@@ -1678,7 +1649,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
               ontologyResult.analysis?.narrative || ontologyResult.narrative,
             answer:
               ontologyResult.analysis?.narrative ||
-              "Ontology analysis completed",
+              "Analisis hubungan berhasil diselesaikan",
             model: "llama-3.3-70b-versatile",
           };
         } else {
@@ -1695,7 +1666,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         }
 
         const processingTime = Date.now() - startTime;
-        console.log("📊 Raw API Response:", result);
+        console.log("📊 Respons API Mentah:", result);
 
         const transformedSources = transformSources(result.sources);
 
@@ -1725,7 +1696,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           analysisResults = [
             {
               type: result.visualization.type || "chart",
-              title: result.visualization.title || "Visual Analysis",
+              title: result.visualization.title || "Analisis Visual",
               data: fixedData,
               narrative: removeMarkdownBold(
                 result.narrative || result.visualization.narrative || ""
@@ -1740,11 +1711,11 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         ) {
           analysisResults = result.analysis_results.map((analysis: any) => ({
             type: analysis.type || "analysis",
-            title: analysis.title || `Analysis ${analysis.type}`,
+            title: analysis.title || `Analisis ${analysis.type}`,
             data: validateAndFixAnalysisData(
               analysis.data || analysis.structure || analysis
             ),
-            description: analysis.description || analysis.narrative, // Tambahkan description
+            description: analysis.description || analysis.narrative,
             narrative: analysis.narrative || result.narrative,
             insights: analysis.insights || [],
             recommendations: analysis.recommendations || [],
@@ -1774,12 +1745,12 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           analysisResults = [
             {
               type: "text",
-              title: "AI Response",
+              title: "Respons AI",
               data: { items: [] },
               narrative: removeMarkdownBold(result.answer),
-              insights: ["Response berhasil di-generate"],
+              insights: ["Respons berhasil di-generate"],
               recommendations: [
-                "Gunakan query yang lebih spesifik untuk visualisasi",
+                "Gunakan pertanyaan yang lebih spesifik untuk visualisasi",
               ],
             },
           ];
@@ -1826,7 +1797,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           ontology_data: result.ontology_data,
         };
 
-        console.log("✅ Final response data:", responseData);
+        console.log("✅ Data respons final:", responseData);
 
         if (props.onProcessComplete) {
           props.onProcessComplete(responseData);
@@ -1834,7 +1805,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
 
         return responseData;
       } catch (error) {
-        console.error("❌ Error processing query:", error);
+        console.error("❌ Error memproses pertanyaan:", error);
         throw error;
       }
     };
@@ -1915,7 +1886,11 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         setUploadProgress(100);
 
         if (result.success) {
-          setUploadSuccess(`${result.data.successful} file berhasil diupload!`);
+          const successMessage = `${result.data.successful} file berhasil diupload!`;
+          setUploadSuccess(successMessage);
+          setShowUploadSuccess(true);
+
+          // Reset form setelah berhasil upload
           setTimeout(() => {
             setShowUploadModal(false);
             setUploadedFiles([]);
@@ -1924,6 +1899,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
               classification: "Internal",
               tags: [],
             });
+            setUploadSuccess("");
           }, 2000);
         } else {
           throw new Error(result.error || "Upload gagal");
@@ -1968,11 +1944,6 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
       );
     };
 
-    const handleTemplateSelect = (template: string) => {
-      setQuery(template);
-      textareaRef.current?.focus();
-    };
-
     const handleProcess = async () => {
       if (!query.trim() || isProcessing) return;
 
@@ -1991,9 +1962,9 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         let token;
         try {
           token = getToken();
-          console.log("🔐 Token validated successfully");
+          console.log("🔐 Token berhasil divalidasi");
         } catch (tokenError) {
-          console.error("❌ Token validation failed:", tokenError);
+          console.error("❌ Validasi token gagal:", tokenError);
           throw new Error(
             "Anda perlu login terlebih dahulu. Silakan login untuk menggunakan fitur ini."
           );
@@ -2002,7 +1973,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         const aiResponse = await processQuery(query);
         setChatHistory((prev) => [...prev, aiResponse]);
       } catch (error) {
-        console.error("❌ Error in handleProcess:", error);
+        console.error("❌ Error dalam handleProcess:", error);
 
         let errorMessage = "Terjadi error yang tidak diketahui";
         let shouldRedirectToLogin = false;
@@ -2038,7 +2009,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
 
         if (shouldRedirectToLogin) {
           setTimeout(() => {
-            console.log("🔄 Redirecting to login page...");
+            console.log("🔄 Mengarahkan ke halaman login...");
             window.location.href = "/login";
           }, 3000);
         }
@@ -2063,8 +2034,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
       setChatHistory([
         {
           id: "1",
-          content:
-            "Percakapan telah dibersihkan. Groq Llama 3.3 70B Versatile RAG System siap digunakan!",
+          content: "Percakapan telah dibersihkan. Ada yang bisa saya bantu?",
           role: "assistant",
           timestamp: new Date(),
         },
@@ -2073,7 +2043,9 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
 
     const copyConversation = () => {
       const conversationText = chatHistory
-        .map((msg) => `${msg.role === "user" ? "USER" : "AI"}: ${msg.content}`)
+        .map(
+          (msg) => `${msg.role === "user" ? "ANDA" : "ASISTEN"}: ${msg.content}`
+        )
         .join("\n\n");
       navigator.clipboard.writeText(conversationText);
     };
@@ -2107,7 +2079,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         case "error":
           return "Orchestrator System Error";
         default:
-          return "Connecting to Orchestrator";
+          return "Conneting to Orchestrator";
       }
     };
 
@@ -2185,7 +2157,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         return (
           <div className="text-center py-8 text-muted-foreground">
             <FileBarChart className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>Tidak ada data analisis visual untuk ditampilkan</p>
+            <p>Belum ada data analisis visual untuk ditampilkan</p>
           </div>
         );
       }
@@ -2193,7 +2165,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
       const currentAnalysis = analyses[selectedVizIndex];
       const processedData = validateAndFixAnalysisData(currentAnalysis.data);
       const narrative = currentAnalysis.narrative;
-      const description = currentAnalysis.description || narrative; // Fallback ke narrative jika description tidak ada
+      const description = currentAnalysis.description || narrative;
       const insights = currentAnalysis.insights || [];
       const recommendations = currentAnalysis.recommendations || [];
 
@@ -2210,7 +2182,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   className="flex items-center gap-2 whitespace-nowrap"
                 >
                   {getVisualizationIcon(analysis.type)}
-                  {analysis.title || `Visualization ${index + 1}`}
+                  {analysis.title || `Visualisasi ${index + 1}`}
                 </Button>
               ))}
             </div>
@@ -2220,8 +2192,8 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           <UniversalD3Visualization
             data={processedData.items || []}
             type={currentAnalysis.type || "chart"}
-            title={currentAnalysis.title || "Visual Analysis"}
-            description={description} // Gunakan variable yang sudah di-handle
+            title={currentAnalysis.title || "Analisis Visual"}
+            description={description}
             narrative={narrative}
             insights={insights}
             recommendations={recommendations}
@@ -2233,7 +2205,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Lightbulb className="w-4 h-4 text-yellow-600" />
-                    Key Insights
+                    Insight Utama
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2256,7 +2228,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Target className="w-4 h-4 text-blue-600" />
-                    Recommendations
+                    Rekomendasi
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2284,7 +2256,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         return (
           <div className="text-center py-8 text-muted-foreground">
             <GitGraph className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>Data ontology tidak tersedia</p>
+            <p>Data analisis hubungan belum tersedia</p>
           </div>
         );
       }
@@ -2343,12 +2315,12 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 <div className="flex items-center gap-2 mb-2">
                   <Network className="w-4 h-4 text-purple-600" />
                   <span className="font-medium text-purple-800">
-                    Social Network Analysis
+                    Analisis Jaringan Sosial
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <strong>Processing Steps:</strong>
+                    <strong>Langkah Pemrosesan:</strong>
                     <ul className="text-xs mt-1 space-y-1">
                       {message.enhanced_metadata.processing_steps?.map(
                         (step: string, index: number) => (
@@ -2358,20 +2330,20 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                     </ul>
                   </div>
                   <div>
-                    <strong>Analysis Metrics:</strong>
+                    <strong>Metrik Analisis:</strong>
                     <div className="text-xs mt-1 space-y-1">
                       <div>
-                        • Data Points: {message.enhanced_metadata.data_points}
+                        • Titik Data: {message.enhanced_metadata.data_points}
                       </div>
                       <div>
-                        • Confidence:{" "}
+                        • Tingkat Keyakinan:{" "}
                         {message.enhanced_metadata.confidence_score}%
                       </div>
                       <div>
-                        • Quality: {message.enhanced_metadata.visual_quality}
+                        • Kualitas: {message.enhanced_metadata.visual_quality}
                       </div>
                       <div>
-                        • Processing Time:{" "}
+                        • Waktu Pemrosesan:{" "}
                         {message.enhanced_metadata.total_processing_time}ms
                       </div>
                     </div>
@@ -2387,7 +2359,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   className="bg-green-100 text-green-700 border-green-200"
                 >
                   <Database className="w-3 h-3 mr-1" />
-                  Real Data
+                  Data Nyata
                   {message.enhanced_metadata.real_data_confidence && (
                     <span className="ml-1">
                       (
@@ -2404,13 +2376,13 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   className="bg-blue-100 text-blue-700 border-blue-200"
                 >
                   <Sparkles className="w-3 h-3 mr-1" />
-                  AI-Generated Data
+                  Data AI-Generated
                 </Badge>
               )}
 
               {message.enhanced_metadata.data_points && (
                 <Badge variant="outline" className="text-xs">
-                  📊 {message.enhanced_metadata.data_points} data points
+                  📊 {message.enhanced_metadata.data_points} titik data
                 </Badge>
               )}
             </div>
@@ -2421,7 +2393,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   variant="outline"
                   className="text-xs bg-purple-50 text-purple-700"
                 >
-                  Type: {message.enhanced_metadata.query_type}
+                  Tipe: {message.enhanced_metadata.query_type}
                 </Badge>
               </div>
             )}
@@ -2429,21 +2401,21 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
             {message.visualization?.intent_analysis && (
               <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                 <div className="font-medium text-yellow-800 mb-1">
-                  AI Analysis:
+                  Analisis AI:
                 </div>
                 <div className="text-yellow-700">
                   {message.visualization.intent_analysis.reasoning}
                 </div>
                 <div className="flex gap-2 mt-1">
                   <Badge variant="outline" className="text-xs">
-                    Confidence:{" "}
+                    Keyakinan:{" "}
                     {Math.round(
                       message.visualization.intent_analysis.confidence * 100
                     )}
                     %
                   </Badge>
                   <Badge variant="outline" className="text-xs">
-                    Type:{" "}
+                    Tipe:{" "}
                     {message.visualization.intent_analysis.recommendedType}
                   </Badge>
                 </div>
@@ -2453,9 +2425,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
             {message.enhanced_metadata.suggestions &&
               message.enhanced_metadata.suggestions.length > 0 && (
                 <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-                  <div className="font-medium text-blue-800 mb-1">
-                    Suggestions:
-                  </div>
+                  <div className="font-medium text-blue-800 mb-1">Saran:</div>
                   <ul className="text-blue-700 space-y-1">
                     {message.enhanced_metadata.suggestions.map(
                       (suggestion: string, index: number) => (
@@ -2536,13 +2506,13 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         <CardHeader className="pb-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">
-              Query Input - {getModeConfig(selectedMode).name} Mode
+              Query Input - Mode {getModeConfig(selectedMode).name}
             </CardTitle>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full border border-purple-200">
                 <Sparkles className="w-4 h-4 text-purple-600" />
                 <span className="text-sm font-medium text-purple-700">
-                  {getModeConfig(selectedMode).name} Mode
+                  Mode {getModeConfig(selectedMode).name}
                 </span>
               </div>
 
@@ -2555,20 +2525,9 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   className="flex items-center gap-1"
                 >
                   <GitGraph className="w-4 h-4" />
-                  Options
+                  Opsi
                 </Button>
               )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-1"
-                disabled={isProcessing}
-              >
-                <FileUp className="w-4 h-4" />
-                Upload Dokumen
-              </Button>
 
               <Button
                 variant="ghost"
@@ -2580,7 +2539,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 <RefreshCw
                   className={cn("w-4 h-4", isProcessing && "animate-spin")}
                 />
-                Test
+                Test Koneksi
               </Button>
               <Button
                 variant="ghost"
@@ -2629,7 +2588,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                       className="text-xs bg-blue-50 text-blue-700 border-blue-200"
                     >
                       <Filter className="w-3 h-3 mr-1" />
-                      Classification
+                      Klasifikasi
                     </Badge>
                     <Badge
                       variant="outline"
@@ -2643,7 +2602,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                       className="text-xs bg-orange-50 text-orange-700 border-orange-200"
                     >
                       <Shield className="w-3 h-3 mr-1" />
-                      Security
+                      Keamanan
                     </Badge>
                   </div>
                 </div>
@@ -2735,7 +2694,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                                 {message.role === "assistant" &&
                                   message.confidence && (
                                     <span className="font-medium">
-                                      {message.confidence}% confidence
+                                      {message.confidence}% keyakinan
                                     </span>
                                   )}
                               </div>
@@ -2777,9 +2736,9 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                                   ></div>
                                 </div>
                                 {selectedMode === "enhanced_visual"
-                                  ? "Memproses Enhanced Visual Analysis..."
+                                  ? "Memproses Analisis Visual..."
                                   : selectedMode === "ontology"
-                                  ? "Memproses Ontology Analysis..."
+                                  ? "Memproses Analisis Hubungan..."
                                   : "Memproses Jawaban..."}
                                 <Badge
                                   variant="outline"
@@ -2796,7 +2755,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                                   variant="outline"
                                   className="text-xs bg-blue-50 text-blue-700"
                                 >
-                                  Classification
+                                  Klasifikasi
                                 </Badge>
                                 <Badge
                                   variant="outline"
@@ -2808,14 +2767,14 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                                   variant="outline"
                                   className="text-xs bg-orange-50 text-orange-700"
                                 >
-                                  Security
+                                  Keamanan
                                 </Badge>
                                 {selectedMode === "enhanced_visual" && (
                                   <Badge
                                     variant="outline"
                                     className="text-xs bg-purple-50 text-purple-700"
                                   >
-                                    Enhanced Visual Analysis
+                                    Analisis Visual
                                   </Badge>
                                 )}
                                 {selectedMode === "ontology" && (
@@ -2823,7 +2782,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                                     variant="outline"
                                     className="text-xs bg-indigo-50 text-indigo-700"
                                   >
-                                    Ontology Analysis
+                                    Analisis Hubungan
                                   </Badge>
                                 )}
                               </div>
@@ -2843,32 +2802,27 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           {/* Input Section */}
           <div className="p-3 space-y-3 flex-shrink-0 border-t">
             <div className="space-y-2">
-              <Textarea
-                ref={textareaRef}
-                placeholder={getModeConfig(selectedMode).description}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyPress}
-                className="min-h-[60px] resize-none text-sm"
-                disabled={isProcessing}
-              />
-
-              {/* Template Queries */}
-              <div className="grid grid-cols-2 gap-2">
-                {(QUERY_TEMPLATES[selectedMode] || [])
-                  .slice(0, 2)
-                  .map((template, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleTemplateSelect(template)}
-                      className="justify-start h-auto py-1.5 text-xs text-left"
-                      disabled={isProcessing}
-                    >
-                      <span className="line-clamp-2 text-xs">{template}</span>
-                    </Button>
-                  ))}
+              <div className="relative">
+                <Textarea
+                  ref={textareaRef}
+                  placeholder={getModeConfig(selectedMode).description}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  className="min-h-[60px] resize-none text-sm pr-10"
+                  disabled={isProcessing}
+                />
+                {/* Upload Icon di pojok kanan textarea */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowUploadModal(true)}
+                  disabled={isProcessing}
+                  className="absolute right-2 top-2 h-7 w-7 p-0"
+                  title="Upload Dokumen"
+                >
+                  <Upload className="w-4 h-4" />
+                </Button>
               </div>
             </div>
 
@@ -2954,12 +2908,12 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   {isProcessing ? (
                     <>
                       <div className="w-3 h-3 border-2 border-current border-r-transparent rounded-full animate-spin" />
-                      <span className="text-xs">Process</span>
+                      <span className="text-xs">Memproses</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-3 h-3" />
-                      <span className="text-xs">Send</span>
+                      <span className="text-xs">send</span>
                     </>
                   )}
                 </Button>
@@ -3261,6 +3215,23 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 </div>
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Upload Success Notification */}
+        {showUploadSuccess && (
+          <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">
+                    Upload Berhasil!
+                  </p>
+                  <p className="text-xs text-green-700">{uploadSuccess}</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </Card>

@@ -44,12 +44,17 @@ export default function LoginPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  
+
   // Auto refresh references
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [tokenExpiry, setTokenExpiry] = useState<number | null>(null);
   const [remainingTime, setRemainingTime] = useState<number | null>(null);
+
+  // Constants for timing (10 minutes)
+  const TOKEN_EXPIRY_THRESHOLD = 60; // Refresh jika sisa 1 menit
+  const TOKEN_CHECK_INTERVAL = 30000; // Check setiap 30 detik
+  const TOKEN_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 menit dalam milidetik
 
   // Log environment info pada mount
   useEffect(() => {
@@ -72,7 +77,7 @@ export default function LoginPage() {
   const refreshToken = async (): Promise<boolean> => {
     try {
       const refreshToken = localStorage.getItem("refreshToken");
-      
+
       if (!refreshToken) {
         throw new Error("No refresh token available");
       }
@@ -86,13 +91,13 @@ export default function LoginPage() {
       // Update access token
       const { accessToken, expiresAt, remainingTime } = data.data;
       localStorage.setItem("accessToken", accessToken);
-      
+
       // Update expiry info
       if (expiresAt) {
         const expiryTime = new Date(expiresAt).getTime();
         setTokenExpiry(expiryTime);
       }
-      
+
       if (remainingTime) {
         setRemainingTime(remainingTime);
       }
@@ -110,7 +115,7 @@ export default function LoginPage() {
   const quickRefreshToken = async (): Promise<boolean> => {
     try {
       const refreshToken = localStorage.getItem("refreshToken");
-      
+
       if (!refreshToken) {
         throw new Error("No refresh token available");
       }
@@ -123,7 +128,7 @@ export default function LoginPage() {
 
       const { accessToken, remainingTime } = data.data;
       localStorage.setItem("accessToken", accessToken);
-      
+
       if (remainingTime) {
         setRemainingTime(remainingTime);
       }
@@ -155,55 +160,62 @@ export default function LoginPage() {
     }
   };
 
-  // Setup auto refresh system
+  // Setup auto refresh system dengan interval 10 menit
   const setupAutoRefresh = () => {
     clearAllIntervals();
 
     // Check token status setiap 30 detik
     tokenCheckIntervalRef.current = setInterval(async () => {
       const tokenInfo = await verifyToken();
-      
+
       if (tokenInfo) {
         setRemainingTime(tokenInfo.remainingTime);
-        
+
         // Jika token akan expired dalam 1 menit, refresh
-        if (tokenInfo.remainingTime < 60 && tokenInfo.remainingTime > 0) {
+        if (
+          tokenInfo.remainingTime < TOKEN_EXPIRY_THRESHOLD &&
+          tokenInfo.remainingTime > 0
+        ) {
           console.log("🔄 Token expiring soon, refreshing...");
           await quickRefreshToken();
         }
-        
+
         // Jika token sudah expired, try refresh
         if (tokenInfo.remainingTime <= 0) {
           console.log("🔄 Token expired, attempting refresh...");
           await refreshToken();
         }
       }
-    }, 30000); // Check every 30 seconds
+    }, TOKEN_CHECK_INTERVAL);
 
-    // Force refresh setiap 4 menit sebagai fallback
+    // Force refresh setiap 10 menit sebagai fallback
     refreshIntervalRef.current = setInterval(async () => {
-      console.log("🔄 Scheduled token refresh");
+      console.log("🔄 Scheduled token refresh (10 minutes)");
       await quickRefreshToken();
-    }, 4 * 60 * 1000); // 4 minutes
+    }, TOKEN_REFRESH_INTERVAL);
+
+    console.log(
+      `✅ Auto refresh setup - Checking every 30s, refreshing every 10m`
+    );
   };
 
   // Handle auto logout
   const handleAutoLogout = () => {
     clearAllIntervals();
-    
+
     // Clear semua data auth
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
-    
+
     // Show logout message
     setMessage({
       type: "error",
-      text: "Session expired. Please login again."
+      text: "Session expired. Please login again.",
     });
-    
+
     console.log("🔒 Auto logout due to token expiration");
-    
+
     // Redirect to login
     router.replace("/");
   };
@@ -224,7 +236,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (remainingTime !== null && remainingTime > 0) {
       const interval = setInterval(() => {
-        setRemainingTime(prev => prev !== null ? Math.max(0, prev - 1) : null);
+        setRemainingTime((prev) =>
+          prev !== null ? Math.max(0, prev - 1) : null
+        );
       }, 1000);
 
       return () => clearInterval(interval);
@@ -245,22 +259,25 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setMessage(null);
-  
+
     try {
-      console.log("🔧 Attempting login with API URL:", process.env.NEXT_PUBLIC_API_URL);
-      
+      console.log(
+        "🔧 Attempting login with API URL:",
+        process.env.NEXT_PUBLIC_API_URL
+      );
+
       const data: LoginResponse = await apiClient.login({ username, password });
-  
-      if (!data.success)
-        throw new Error(data.message || "Login gagal");
-  
+
+      if (!data.success) throw new Error(data.message || "Login gagal");
+
       // Simpan token & user dengan validation
-      const { accessToken, refreshToken, expiresAt, remainingTime } = data.data.tokens;
-      
+      const { accessToken, refreshToken, expiresAt, remainingTime } =
+        data.data.tokens;
+
       if (!accessToken || !accessToken.startsWith("eyJ")) {
         throw new Error("Token format invalid");
       }
-  
+
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
       localStorage.setItem("user", JSON.stringify(data.data.user));
@@ -270,27 +287,31 @@ export default function LoginPage() {
         const expiryTime = new Date(expiresAt).getTime();
         setTokenExpiry(expiryTime);
       }
-      
+
       if (remainingTime) {
         setRemainingTime(remainingTime);
       }
-  
+
       // Verify storage
       const storedToken = localStorage.getItem("accessToken");
       if (storedToken !== accessToken) {
         throw new Error("Failed to store token in localStorage");
       }
-  
-      console.log("✅ Login successful, token expires in:", remainingTime, "seconds");
-  
+
+      console.log(
+        "✅ Login successful, token expires in:",
+        remainingTime,
+        "seconds"
+      );
+
       setMessage({
         type: "success",
         text: "Login berhasil! Mengalihkan ke workspace...",
       });
 
-      // Setup auto refresh system
+      // Setup auto refresh system dengan interval 10 menit
       setupAutoRefresh();
-  
+
       // Redirect setelah delay kecil
       setTimeout(() => {
         router.replace("/analyst-workspace");
@@ -301,11 +322,12 @@ export default function LoginPage() {
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
       clearAllIntervals();
-      
+
       console.error("❌ Login error:", err);
-      setMessage({ 
-        type: "error", 
-        text: err.message || "Login gagal. Periksa koneksi atau credential Anda." 
+      setMessage({
+        type: "error",
+        text:
+          err.message || "Login gagal. Periksa koneksi atau credential Anda.",
       });
     } finally {
       setIsLoading(false);
@@ -317,7 +339,7 @@ export default function LoginPage() {
     if (seconds === null) return "--:--";
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -331,14 +353,24 @@ export default function LoginPage() {
         {/* Token Expiry Indicator */}
         {remainingTime !== null && remainingTime > 0 && (
           <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-            <div className={`text-xs px-3 py-1 rounded-full border flex items-center gap-2 ${
-              remainingTime > 60 
-                ? "bg-green-100 text-green-800 border-green-200"
-                : "bg-yellow-100 text-yellow-800 border-yellow-200"
-            }`}>
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                remainingTime > 60 ? "bg-green-500" : "bg-yellow-500"
-              }`}></div>
+            <div
+              className={`text-xs px-3 py-1 rounded-full border flex items-center gap-2 ${
+                remainingTime > 300 // 5 menit
+                  ? "bg-green-100 text-green-800 border-green-200"
+                  : remainingTime > 60 // 1 menit
+                  ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                  : "bg-red-100 text-red-800 border-red-200"
+              }`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full animate-pulse ${
+                  remainingTime > 300
+                    ? "bg-green-500"
+                    : remainingTime > 60
+                    ? "bg-yellow-500"
+                    : "bg-red-500"
+                }`}
+              ></div>
               <span>Token: {formatTime(remainingTime)}</span>
             </div>
           </div>
@@ -432,7 +464,9 @@ export default function LoginPage() {
 
         {/* Security Notice */}
         <div className="text-center text-xs text-gray-500 pt-4 border-t">
-          <p className="mt-1">{process.env.NEXT_PUBLIC_APP_NAME || "ASISGO CORE-SOVEREIGN"}</p>
+          <p className="mt-1">
+            {process.env.NEXT_PUBLIC_APP_NAME || "ASISGO CORE-SOVEREIGN"}
+          </p>
         </div>
       </motion.div>
     </div>

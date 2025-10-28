@@ -1280,7 +1280,7 @@ export const EnhancedOntologyContent = ({
       <div className="border-b">
         <div className="flex space-x-8">
           {[
-            { id: "d3_graph" as const, label: "D3 Graph", icon: GitGraph },
+            // { id: "d3_graph" as const, label: "D3 Graph", icon: GitGraph }, //sudah bisa jalan tinggal hapus commentnya jika pengen digunakan
             // {
             //   id: "simple_graph" as const,
             //   label: "Simple Graph",
@@ -1309,7 +1309,7 @@ export const EnhancedOntologyContent = ({
 
       {/* Tab Content */}
       <div className="min-h-96">
-        {activeTab === "d3_graph" && (
+        {/* {activeTab === "d3_graph" && (
           <div className="space-y-4">
             {graph ? (
               <D3OntologyVisualization data={data} />
@@ -1320,7 +1320,7 @@ export const EnhancedOntologyContent = ({
               </div>
             )}
           </div>
-        )}
+        )} */}
 
         {activeTab === "simple_graph" && (
           <div className="space-y-4">
@@ -1411,60 +1411,153 @@ export const EnhancedOntologyContent = ({
                   <div className="space-y-3">
                     {ontology.relations
                       .slice(0, 15)
-                      .map((relation: any, index: number) => (
-                        <div
-                          key={relation.id || index}
-                          className="p-3 border rounded-lg"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-2 h-2 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    ONTOLOGY_EDGE_COLORS[relation.type] ||
-                                    ONTOLOGY_EDGE_COLORS.default,
-                                }}
-                              ></div>
-                              <span className="font-medium capitalize">
-                                {relation.type}
-                              </span>
+                      .map((relation: any, index: number) => {
+                        // Helper function untuk extract label yang lebih readable dari ID
+                        const getReadableLabel = (id: string) => {
+                          if (!id) return "Unknown";
+
+                          // Coba extract dari format person_tingkat_kerja_sama_1761625571530_guemr
+                          const parts = id.split("_");
+                          if (parts.length >= 3) {
+                            // Ambil bagian tengah (exclude prefix dan timestamp/suffix)
+                            const meaningfulParts = parts.slice(1, -2); // Exclude type prefix dan timestamp/suffix
+                            if (meaningfulParts.length > 0) {
+                              return meaningfulParts
+                                .join(" ")
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/_/g, " ")
+                                .trim()
+                                .split(" ")
+                                .map(
+                                  (word) =>
+                                    word.charAt(0).toUpperCase() + word.slice(1)
+                                )
+                                .join(" ");
+                            }
+                          }
+
+                          // Fallback: remove underscores and capitalize
+                          return id
+                            .replace(/_/g, " ")
+                            .replace(/([A-Z])/g, " $1")
+                            .trim()
+                            .split(" ")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        // Extract source dan target yang readable
+                        const sourceLabel = getReadableLabel(
+                          relation.source || relation.source_entity || ""
+                        );
+                        const targetLabel = getReadableLabel(
+                          relation.target || relation.target_entity || ""
+                        );
+
+                        // Buat relation description yang lebih natural
+                        const getRelationDescription = () => {
+                          const relationType = relation.type || "related";
+                          const readableType = relationType
+                            .replace(/_/g, " ")
+                            .split(" ")
+                            .map(
+                              (word: string) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+
+                          return `${readableType}: ${sourceLabel} → ${targetLabel}`;
+                        };
+
+                        return (
+                          <div
+                            key={relation.id || index}
+                            className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-2 h-2 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      ONTOLOGY_EDGE_COLORS[relation.type] ||
+                                      ONTOLOGY_EDGE_COLORS.default,
+                                  }}
+                                ></div>
+                                <span className="font-medium text-sm">
+                                  {getRelationDescription()}
+                                </span>
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                {relation.confidence
+                                  ? (relation.confidence * 100).toFixed(0) + "%"
+                                  : "N/A"}
+                              </Badge>
                             </div>
-                            <Badge variant="outline">
-                              Confidence:{" "}
-                              {relation.confidence
-                                ? (relation.confidence * 100).toFixed(1) + "%"
-                                : "N/A"}
-                            </Badge>
-                          </div>
-                          <div className="text-sm grid grid-cols-3 gap-4">
-                            <div>
-                              <span className="text-muted-foreground">
-                                Source:
-                              </span>
-                              <div className="font-medium">
-                                {relation.source || relation.source_entity}
+
+                            <div className="text-sm grid grid-cols-3 gap-4 items-center">
+                              <div className="text-center p-2 bg-blue-50 rounded border">
+                                <div className="font-semibold text-blue-700">
+                                  {sourceLabel}
+                                </div>
+                                <div className="text-xs text-blue-600 mt-1 capitalize">
+                                  {relation.source_type || "entity"}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-center justify-center">
+                                <ArrowRight className="w-4 h-4 text-gray-500 mb-1" />
+                                <span className="text-xs font-medium px-2 py-1 bg-gray-100 rounded capitalize">
+                                  {relation.type?.replace(/_/g, " ") ||
+                                    "related"}
+                                </span>
+                              </div>
+
+                              <div className="text-center p-2 bg-green-50 rounded border">
+                                <div className="font-semibold text-green-700">
+                                  {targetLabel}
+                                </div>
+                                <div className="text-xs text-green-600 mt-1 capitalize">
+                                  {relation.target_type || "entity"}
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center justify-center">
-                              <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">
-                                Target:
-                              </span>
-                              <div className="font-medium">
-                                {relation.target || relation.target_entity}
+
+                            {/* Relation context/evidence */}
+                            {relation.text && (
+                              <div className="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600 border">
+                                <span className="font-medium">Context: </span>"
+                                {relation.text}"
                               </div>
-                            </div>
+                            )}
+
+                            {/* Metadata tambahan */}
+                            {(relation.metadata || relation.evidence) && (
+                              <div className="mt-2 flex gap-2">
+                                {relation.metadata && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    Metadata
+                                  </Badge>
+                                )}
+                                {relation.evidence && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    Evidence
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {relation.text && (
-                            <div className="mt-2 text-sm text-muted-foreground">
-                              "{relation.text}"
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     {ontology.relations.length > 15 && (
                       <div className="text-center text-sm text-muted-foreground pt-2">
                         ... dan {ontology.relations.length - 15} relations
