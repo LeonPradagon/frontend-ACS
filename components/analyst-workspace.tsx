@@ -100,6 +100,10 @@ interface FilterState {
   tags: string[];
 }
 
+// Constants untuk cooldown
+const TOKEN_CHECK_COOLDOWN = 60000; // 60 detik
+const MAX_TOKEN_CHECKS_PER_MINUTE = 3;
+
 export function AnalystWorkspace() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -135,6 +139,11 @@ export function AnalystWorkspace() {
 
   // Ref untuk AIQueryInput
   const aiQueryInputRef = useRef<any>(null);
+
+  // Ref untuk cooldown management
+  const lastTokenCheckRef = useRef<number>(0);
+  const tokenCheckCountRef = useRef<number>(0);
+  const tokenCheckResetTimeoutRef = useRef<NodeJS.Timeout>();
 
   // State untuk data workspace yang akan di-update berdasarkan AI responses
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData>({
@@ -224,6 +233,119 @@ export function AnalystWorkspace() {
     },
   });
 
+  // Fungsi untuk check token dengan cooldown
+  const checkTokenWithCooldown = (): boolean => {
+    const now = Date.now();
+    const timeSinceLastCheck = now - lastTokenCheckRef.current;
+
+    // Reset counter setiap menit
+    if (!tokenCheckResetTimeoutRef.current) {
+      tokenCheckResetTimeoutRef.current = setTimeout(() => {
+        tokenCheckCountRef.current = 0;
+        tokenCheckResetTimeoutRef.current = undefined;
+      }, 60000);
+    }
+
+    // Cek apakah sudah melebihi batas maksimal
+    if (tokenCheckCountRef.current >= MAX_TOKEN_CHECKS_PER_MINUTE) {
+      console.log(
+        "⏳ Batas maksimal pengecekan token tercapai, tunggu 1 menit"
+      );
+      return true; // Return true untuk mencegah redirect, anggap token valid sementara
+    }
+
+    // Cek cooldown
+    if (timeSinceLastCheck < TOKEN_CHECK_COOLDOWN) {
+      console.log("⏳ Cooldown token check, skip pengecekan");
+      return true; // Return true untuk mencegah redirect, anggap token valid sementara
+    }
+
+    // Update last check time dan counter
+    lastTokenCheckRef.current = now;
+    tokenCheckCountRef.current++;
+
+    return performTokenValidation();
+  };
+
+  // Fungsi untuk validasi token yang sebenarnya
+  const performTokenValidation = (): boolean => {
+    try {
+      const token = localStorage.getItem("accessToken");
+
+      if (!token) {
+        console.log("❌ Token tidak ditemukan, redirect ke login");
+        redirectToLogin();
+        return false;
+      }
+
+      // Validasi format token dasar
+      if (!token.startsWith("eyJ") || token.length < 50) {
+        console.log("❌ Format token tidak valid, redirect ke login");
+        clearTokensAndRedirect();
+        return false;
+      }
+
+      // Optional: Check token expiration (jika ada informasi expiry di token)
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        const expiry = payload.exp * 1000; // Convert to milliseconds
+        if (Date.now() > expiry) {
+          console.log("❌ Token expired, redirect ke login");
+          clearTokensAndRedirect();
+          return false;
+        }
+      } catch (e) {
+        console.log("⚠️ Tidak bisa memeriksa expiry token, lanjutkan");
+      }
+
+      console.log("✅ Token valid, user dapat melanjutkan");
+      return true;
+    } catch (error) {
+      console.error("❌ Error checking token:", error);
+      clearTokensAndRedirect();
+      return false;
+    }
+  };
+
+  // Effect untuk check token dan redirect jika tidak valid
+  useEffect(() => {
+    const checkTokenAndRedirect = () => {
+      checkTokenWithCooldown();
+    };
+
+    // Check token saat komponen mount
+    checkTokenAndRedirect();
+
+    // Juga check token ketika window mendapatkan focus (tab diaktifkan kembali)
+    const handleFocus = () => {
+      checkTokenAndRedirect();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      if (tokenCheckResetTimeoutRef.current) {
+        clearTimeout(tokenCheckResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Fungsi untuk clear tokens dan redirect ke login
+  const clearTokensAndRedirect = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    redirectToLogin();
+  };
+
+  // Fungsi untuk redirect ke login
+  const redirectToLogin = () => {
+    console.log("🔄 Mengarahkan ke halaman login...");
+    router.push("/login");
+  };
+
   // Mode configurations - sync dengan AIQueryInput
   const MODE_CONFIG = {
     qa: {
@@ -297,6 +419,11 @@ export function AnalystWorkspace() {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
+
+    // Clear cooldown timers
+    if (tokenCheckResetTimeoutRef.current) {
+      clearTimeout(tokenCheckResetTimeoutRef.current);
+    }
 
     console.log("🚪 User logged out successfully");
 
@@ -550,7 +677,7 @@ export function AnalystWorkspace() {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 flex items-center justify-center">
                 <img
-                  src={"/logoo.png"}
+                  src={"/images/Asisgo.png"}
                   className="w-12 h-12 object-contain"
                   alt="ASISGO Logo"
                 />
@@ -563,17 +690,6 @@ export function AnalystWorkspace() {
                   ASISGO CORE-SOVEREIGN
                 </span>
               </div>
-            </div>
-
-            {/* Global Search Bar */}
-            <div className="relative w-96">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Pencarian cepat di semua dataset..."
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                className="pl-10 bg-muted/50 border-border"
-              />
             </div>
           </div>
 
@@ -618,250 +734,7 @@ export function AnalystWorkspace() {
       </header>
 
       <div className="flex">
-        {/* Left Sidebar */}
-        <aside className="w-80 bg-sidebar border-r border-sidebar-border h-[calc(100vh-73px)] overflow-y-auto">
-          <div className="p-4 space-y-6">
-            {/* Documents Section */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-sidebar-foreground">
-                Documents
-              </h3>
-              <Select
-                value={filters.category}
-                onValueChange={(value) => handleFilterChange("category", value)}
-              >
-                <SelectTrigger className="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Kategori</SelectItem>
-                  <SelectItem value="intel-reports">
-                    Intel Reports 2024
-                  </SelectItem>
-                  <SelectItem value="threat-analysis">
-                    Database Analisis Ancaman
-                  </SelectItem>
-                  <SelectItem value="policy-docs">Dokumen Kebijakan</SelectItem>
-                  <SelectItem value="field-reports">
-                    Laporan Lapangan
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-sidebar-foreground">
-                Modes
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(MODE_CONFIG).map(([key, mode]) => {
-                  const Icon = mode.icon;
-                  return (
-                    <Button
-                      key={key}
-                      variant={selectedMode === key ? "default" : "outline"}
-                      size="sm"
-                      onClick={() =>
-                        handleModeChange(key as keyof typeof MODE_CONFIG)
-                      }
-                      className={
-                        selectedMode === key
-                          ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                          : "border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent"
-                      }
-                    >
-                      <Icon className="w-3 h-3 mr-1" />
-                      {mode.name}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Persona Selection */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-sidebar-foreground">
-                AI Persona
-              </h3>
-              <Select
-                value={selectedPersona}
-                onValueChange={(value) =>
-                  handlePersonaChange(value as keyof typeof AI_PERSONAS)
-                }
-              >
-                <SelectTrigger className="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AI_PERSONAS).map(([key, persona]) => {
-                    const Icon = persona.icon;
-                    return (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="w-3 h-3" />
-                          <span>{persona.name}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Model Selection */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-sidebar-foreground">
-                AI Model
-              </h3>
-              <Select value={selectedModel} onValueChange={handleModelChange}>
-                <SelectTrigger className="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="llama">Llama 3.1</SelectItem>
-                  <SelectItem value="mistral">Mistral 7B</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Filters Section */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-sidebar-foreground flex items-center gap-2">
-                <Filter className="w-4 h-4" />
-                Filters
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-sidebar-foreground/70 mb-1 block">
-                    Classification Level
-                  </label>
-                  <Select
-                    value={filters.classification}
-                    onValueChange={(value) =>
-                      handleFilterChange("classification", value)
-                    }
-                  >
-                    <SelectTrigger className="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Level</SelectItem>
-                      <SelectItem value="rahasia">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-destructive rounded-full"></div>
-                          Rahasia
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="terbatas">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-accent rounded-full"></div>
-                          Terbatas
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="publik">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-primary rounded-full"></div>
-                          Publik
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-sidebar-foreground/70 mb-1 block">
-                    Date Range
-                  </label>
-                  <Select
-                    value={filters.dateRange}
-                    onValueChange={(value) =>
-                      handleFilterChange("dateRange", value)
-                    }
-                  >
-                    <SelectTrigger className="bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7days">7 Hari Terakhir</SelectItem>
-                      <SelectItem value="30days">30 Hari Terakhir</SelectItem>
-                      <SelectItem value="90days">90 Hari Terakhir</SelectItem>
-                      <SelectItem value="1year">1 Tahun Terakhir</SelectItem>
-                      <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Collapsible
-                open={historyExpanded}
-                onOpenChange={setHistoryExpanded}
-              >
-                <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium text-sidebar-foreground hover:text-sidebar-primary">
-                  <div className="flex items-center gap-2">
-                    <History className="w-4 h-4" />
-                    History ({history.length})
-                  </div>
-                  {historyExpanded ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-2 mt-2">
-                  {history.length === 0 ? (
-                    <div className="text-center py-2">
-                      <p className="text-xs text-sidebar-foreground/50">
-                        Belum ada riwayat analisis. Mulai analisis baru.
-                      </p>
-                    </div>
-                  ) : (
-                    history.map((item) => {
-                      const ModeIcon =
-                        MODE_CONFIG[item.mode as keyof typeof MODE_CONFIG]
-                          ?.icon || MessageSquare;
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-start gap-3 p-2 bg-sidebar-accent rounded border border-sidebar-border cursor-pointer hover:bg-sidebar-accent/80"
-                          onClick={() => handleHistoryItemClick(item)}
-                        >
-                          <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <ModeIcon className="w-3 h-3 text-sidebar-foreground/60" />
-                              <p className="text-xs font-medium text-sidebar-foreground truncate">
-                                {item.query}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-sidebar-foreground/60">
-                              <span>
-                                {
-                                  AI_PERSONAS[
-                                    item.persona as keyof typeof AI_PERSONAS
-                                  ]?.name
-                                }
-                              </span>
-                              <span>•</span>
-                              <span>
-                                {item.timestamp.toLocaleTimeString("id-ID", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
+        {/* Main Content - Full width tanpa sidebar */}
         <main className="flex-1 p-6 space-y-6">
           {/* Query Input Panel dengan integrasi update workspace */}
           <AIQueryInput
@@ -1060,367 +933,8 @@ export function AnalystWorkspace() {
                 </CollapsibleContent>
               </Collapsible>
             </Card>
-
-            {/* Daftar Entitas Berulang Card */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Daftar Entitas Berulang
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleCard("entitas")}
-                  >
-                    {expandedCards.entitas ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <Collapsible open={expandedCards.entitas}>
-                <CollapsibleContent>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <h5 className="text-sm font-medium mb-2">Organisasi</h5>
-                        <div className="space-y-1">
-                          {workspaceData.repeatedEntities.organizations.map(
-                            (org, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center text-xs"
-                              >
-                                <span>{org.name}</span>
-                                <Badge variant="outline">{org.count}x</Badge>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <h5 className="text-sm font-medium mb-2">Lokasi</h5>
-                        <div className="space-y-1">
-                          {workspaceData.repeatedEntities.locations.map(
-                            (loc, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center text-xs"
-                              >
-                                <span>{loc.name}</span>
-                                <Badge variant="outline">{loc.count}x</Badge>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <h5 className="text-sm font-medium mb-2">Teknologi</h5>
-                        <div className="space-y-1">
-                          {workspaceData.repeatedEntities.technologies.map(
-                            (tech, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center text-xs"
-                              >
-                                <span>{tech.name}</span>
-                                <Badge variant="outline">{tech.count}x</Badge>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-
-            {/* Heatmap Topik Card */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Heatmap Topik
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleCard("heatmap")}
-                  >
-                    {expandedCards.heatmap ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <Collapsible open={expandedCards.heatmap}>
-                <CollapsibleContent>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-4 gap-2">
-                        {workspaceData.topicHeatmap.map((item, index) => (
-                          <div key={index} className="text-center">
-                            <div
-                              className={`h-16 ${
-                                item.color
-                              } rounded mb-1 opacity-${
-                                Math.floor(item.intensity / 10) * 10
-                              }`}
-                            ></div>
-                            <p className="text-xs font-medium">{item.topic}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {item.intensity}%
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-
-            {/* Notifikasi Risiko Card */}
-            <Card className="border-destructive/20">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-destructive">
-                    <AlertTriangle className="w-5 h-5" />
-                    Notifikasi Risiko
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleCard("risiko")}
-                  >
-                    {expandedCards.risiko ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <Collapsible open={expandedCards.risiko}>
-                <CollapsibleContent>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {workspaceData.riskNotifications.map(
-                        (notification, index) => (
-                          <div
-                            key={index}
-                            className={`flex items-start gap-3 p-3 ${
-                              notification.level === "kritis"
-                                ? "bg-destructive/10 border border-destructive/20"
-                                : "bg-accent/10 border border-accent/20"
-                            } rounded-lg`}
-                          >
-                            {notification.icon === "AlertTriangle" ? (
-                              <AlertTriangle
-                                className={`w-5 h-5 ${
-                                  notification.level === "kritis"
-                                    ? "text-destructive"
-                                    : "text-accent"
-                                } mt-0.5`}
-                              />
-                            ) : (
-                              <Activity
-                                className={`w-5 h-5 ${
-                                  notification.level === "kritis"
-                                    ? "text-destructive"
-                                    : "text-accent"
-                                } mt-0.5`}
-                              />
-                            )}
-                            <div>
-                              <h5
-                                className={`text-sm font-medium ${
-                                  notification.level === "kritis"
-                                    ? "text-destructive"
-                                    : "text-accent"
-                                }`}
-                              >
-                                {notification.title}
-                              </h5>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {notification.description}
-                              </p>
-                              <div className="flex gap-2 mt-2">
-                                <Badge
-                                  variant={
-                                    notification.level === "kritis"
-                                      ? "destructive"
-                                      : "secondary"
-                                  }
-                                  className="text-xs"
-                                >
-                                  {notification.level === "kritis"
-                                    ? "Kritis"
-                                    : "Tinggi"}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {notification.time}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
           </div>
         </main>
-
-        {/* Right Sidebar - Metadata & Insights */}
-        <aside className="w-80 bg-card border-l border-border h-[calc(100vh-73px)] overflow-y-auto">
-          <div className="p-4">
-            <Collapsible
-              open={metadataExpanded}
-              onOpenChange={setMetadataExpanded}
-            >
-              <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium text-foreground hover:text-primary mb-4">
-                <span>Metadata & Insights</span>
-                {metadataExpanded ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-6">
-                {/* Current Configuration */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-foreground">
-                    Konfigurasi Saat Ini
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted-foreground">Mode:</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {MODE_CONFIG[selectedMode].name}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted-foreground">Persona:</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {AI_PERSONAS[selectedPersona].name}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted-foreground">Model:</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {selectedModel === "llama" ? "Llama 3.1" : "Mistral 7B"}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Extracted Keywords */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-foreground">
-                    Keywords Terekstrak
-                  </h4>
-                  <div className="flex flex-wrap gap-1">
-                    {workspaceData.metadata.keywords.map((keyword, index) => (
-                      <Badge
-                        key={index}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {keyword}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Active Filters */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-foreground">
-                    Filter Aktif
-                  </h4>
-                  <div className="space-y-2">
-                    {filters.classification !== "all" && (
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-muted-foreground">
-                          Klasifikasi:
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {filters.classification}
-                        </Badge>
-                      </div>
-                    )}
-                    {filters.dateRange !== "30days" && (
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-muted-foreground">
-                          Rentang Waktu:
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {filters.dateRange}
-                        </Badge>
-                      </div>
-                    )}
-                    {filters.category !== "all" && (
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-muted-foreground">Kategori:</span>
-                        <Badge variant="outline" className="text-xs">
-                          {filters.category}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Confidence Scores */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-foreground">
-                    Confidence Scores
-                  </h4>
-                  <div className="space-y-2">
-                    {workspaceData.metadata.confidenceScores.map(
-                      (score, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between items-center"
-                        >
-                          <span className="text-xs text-muted-foreground">
-                            {score.label}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  score.score >= 80
-                                    ? "bg-primary"
-                                    : score.score >= 60
-                                    ? "bg-accent"
-                                    : "bg-destructive"
-                                }`}
-                                style={{ width: `${score.score}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-xs font-medium">
-                              {score.score}%
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-        </aside>
       </div>
     </div>
   );

@@ -68,9 +68,209 @@ import { cn } from "@/lib/utils";
 import { EnhancedOntologyContent } from "./ontology/ontology-visualizations";
 import { UniversalD3Visualization } from "./visualisasi/universal-d3-visualization";
 
+// Komponen untuk merender teks dengan markdown sederhana
+const MarkdownText = ({ text }: { text: string }) => {
+  if (!text) return null;
+
+  const processText = (content: string) => {
+    const lines = content.split("\n");
+    const elements = [];
+    let inList = false;
+    let listItems = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // H3: ### Heading
+      if (line.startsWith("### ")) {
+        // Jika sebelumnya ada list, tutup dulu
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(
+          <h3 key={i} className="text-lg font-semibold mt-4 mb-2 text-gray-700">
+            {line.replace("### ", "")}
+          </h3>
+        );
+      }
+      // H2: ## Heading
+      else if (line.startsWith("## ")) {
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(
+          <h2 key={i} className="text-xl font-bold mt-5 mb-3 text-gray-800">
+            {line.replace("## ", "")}
+          </h2>
+        );
+      }
+      // H1: # Heading
+      else if (line.startsWith("# ")) {
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(
+          <h1
+            key={i}
+            className="text-2xl font-bold mt-6 mb-4 text-gray-900 border-b pb-2"
+          >
+            {line.replace("# ", "")}
+          </h1>
+        );
+      }
+      // H4: #### Heading
+      else if (line.startsWith("#### ")) {
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(
+          <h4 key={i} className="text-md font-medium mt-3 mb-1 text-gray-600">
+            {line.replace("#### ", "")}
+          </h4>
+        );
+      }
+      // List item: - item atau * item
+      else if (line.startsWith("- ") || line.startsWith("* ")) {
+        inList = true;
+        listItems.push(
+          <li key={`item-${i}`} className="mb-1">
+            {line.substring(2).replace(/\*\*/g, "")}
+          </li>
+        );
+      }
+      // Garis horizontal: ---
+      else if (line.trim() === "---") {
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(<hr key={i} className="my-4 border-gray-300" />);
+      }
+      // Blockquotes: > text
+      else if (line.startsWith("> ")) {
+        if (inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+        }
+        elements.push(
+          <blockquote
+            key={i}
+            className="border-l-4 border-blue-500 pl-4 my-2 text-gray-600 italic"
+          >
+            {line.replace("> ", "")}
+          </blockquote>
+        );
+      }
+      // Regular text
+      else {
+        // Jika line kosong dan sebelumnya ada list, tutup list
+        if (line.trim() === "" && inList) {
+          elements.push(
+            <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+              {listItems}
+            </ul>
+          );
+          listItems = [];
+          inList = false;
+          elements.push(<br key={i} />);
+        }
+        // Jika masih dalam list dan line tidak kosong, tambahkan sebagai list item
+        else if (inList && line.trim() !== "") {
+          listItems.push(
+            <li key={`item-${i}`} className="mb-1">
+              {line.replace(/\*\*/g, "")}
+            </li>
+          );
+        }
+        // Regular paragraph
+        else if (line.trim() !== "") {
+          if (inList) {
+            elements.push(
+              <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+                {listItems}
+              </ul>
+            );
+            listItems = [];
+            inList = false;
+          }
+          elements.push(
+            <p key={i} className="mb-2">
+              {line.replace(/\*\*/g, "")}
+            </p>
+          );
+        }
+        // Empty line
+        else {
+          if (inList) {
+            elements.push(
+              <ul key={`list-${i}`} className="list-disc ml-6 mb-2">
+                {listItems}
+              </ul>
+            );
+            listItems = [];
+            inList = false;
+          }
+          elements.push(<br key={i} />);
+        }
+      }
+    }
+
+    // Tutup list yang tersisa di akhir
+    if (inList) {
+      elements.push(
+        <ul key="list-final" className="list-disc ml-6 mb-2">
+          {listItems}
+        </ul>
+      );
+    }
+
+    return elements;
+  };
+
+  return (
+    <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
+      {processText(text)}
+    </div>
+  );
+};
+
 const removeMarkdownBold = (text: string): string => {
   if (!text) return "";
-  return text.replace(/\*\*/g, "");
+  return text.replace(/\*\*/g, "").replace(/\*/g, "");
 };
 
 type VisualizationType =
@@ -496,7 +696,7 @@ const VISUALIZATION_TYPES = {
 };
 
 // ==================== BASE URL CONFIGURATION ====================
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // ==================== MODE CONFIGURATIONS ====================
 const MODE_CONFIG: {
@@ -604,13 +804,15 @@ const getToken = (): string => {
 
   if (!token) {
     console.error("❌ Token akses tidak ditemukan di localStorage");
-    throw new Error("Token tidak ditemukan. Silakan login terlebih dahulu.");
+    throw new Error(
+      "Token tidak ditemukan. Silakan refresh halaman atau coba lagi."
+    );
   }
 
   if (!token.startsWith("eyJ") || token.length < 50) {
     console.error("❌ Format token tidak valid");
     localStorage.removeItem("accessToken");
-    throw new Error("Token tidak valid. Silakan login ulang.");
+    throw new Error("Token tidak valid. Silakan refresh halaman.");
   }
 
   return token;
@@ -1427,41 +1629,135 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
       return [];
     };
 
+    // Fungsi untuk mengekstrak keyword dari query
+    const extractKeywords = (query: string): string[] => {
+      const words = query.toLowerCase().split(/\s+/);
+      const stopWords = new Set([
+        "apa",
+        "bagaimana",
+        "mengapa",
+        "kapan",
+        "dimana",
+        "siapa",
+        "yang",
+        "dengan",
+        "untuk",
+        "dari",
+        "pada",
+        "ke",
+        "di",
+        "dan",
+        "atau",
+        "tetapi",
+        "jika",
+        "maka",
+        "karena",
+        "sehingga",
+        "adalah",
+        "ialah",
+        "itu",
+        "ini",
+        "saya",
+        "kamu",
+        "kami",
+        "mereka",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "because",
+        "so",
+      ]);
+
+      return words
+        .filter((word) => word.length > 2 && !stopWords.has(word))
+        .slice(0, 5); // Ambil maksimal 5 keyword
+    };
+
+    // Fungsi untuk membuat sumber referensi berdasarkan keyword
+    const createKeywordSources = (query: string): Source[] => {
+      const keywords = extractKeywords(query);
+
+      if (keywords.length === 0) {
+        return [
+          {
+            id: "general",
+            content:
+              "Analisis berdasarkan pengetahuan umum dan data training model",
+            metadata: {
+              source: "Knowledge Base",
+              category: "General",
+              classification: "Internal",
+            },
+            score: 0.8,
+            type: "knowledge_base",
+          },
+        ];
+      }
+
+      return keywords.map((keyword, index) => ({
+        id: `keyword-${index}`,
+        content: `Informasi terkait "${keyword}" dari knowledge base sistem`,
+        metadata: {
+          source: `Keyword: ${
+            keyword.charAt(0).toUpperCase() + keyword.slice(1)
+          }`,
+          category: "Keyword Analysis",
+          classification: "Internal",
+        },
+        score: 0.7 + index * 0.05, // Score menurun untuk keyword berikutnya
+        type: "keyword_based",
+      }));
+    };
+
     const transformSources = (sources: any): Source[] => {
-      if (!sources) return [];
+      if (!sources || sources.length === 0) {
+        return [];
+      }
+
       try {
         const sourcesArray = safeArray<any>(sources);
-        return sourcesArray.map((source, index) => ({
-          id: source.id || `source-${index}`,
-          content: removeMarkdownBold(
-            source.content ||
-              source.data ||
-              source.text ||
-              "Tidak ada konten yang tersedia"
-          ),
-          metadata: {
-            source:
-              source.metadata?.source ||
-              source.source ||
-              source.type ||
-              "Sumber Tidak Dikenal",
-            category: source.metadata?.category || source.category || "Umum",
-            classification:
-              source.metadata?.classification ||
-              source.classification ||
-              "Publik",
-            date: source.metadata?.date || source.date,
-            author: source.metadata?.author || source.author,
-          },
-          score:
-            typeof source.score === "number"
-              ? source.score
-              : typeof source.enhanced_score === "number"
-              ? source.enhanced_score
-              : 0.8,
-          type: source.type,
-          relevance: source.relevance_category || source.relevance,
-        }));
+
+        // Jika ada sumber dari API, gunakan itu
+        if (sourcesArray.length > 0) {
+          return sourcesArray.map((source, index) => ({
+            id: source.id || `source-${index}`,
+            content: removeMarkdownBold(
+              source.content ||
+                source.data ||
+                source.text ||
+                "Tidak ada konten yang tersedia"
+            ),
+            metadata: {
+              source:
+                source.metadata?.source ||
+                source.source ||
+                source.type ||
+                "Sumber Tidak Dikenal",
+              category: source.metadata?.category || source.category || "Umum",
+              classification:
+                source.metadata?.classification ||
+                source.classification ||
+                "Publik",
+              date: source.metadata?.date || source.date,
+              author: source.metadata?.author || source.author,
+            },
+            score:
+              typeof source.score === "number"
+                ? source.score
+                : typeof source.enhanced_score === "number"
+                ? source.enhanced_score
+                : 0.8,
+            type: source.type,
+            relevance: source.relevance_category || source.relevance,
+          }));
+        }
+
+        return [];
       } catch (error) {
         console.error("Error mengubah sumber:", error);
         return [];
@@ -1668,7 +1964,11 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         const processingTime = Date.now() - startTime;
         console.log("📊 Respons API Mentah:", result);
 
-        const transformedSources = transformSources(result.sources);
+        // Gunakan sumber dari API jika ada, jika tidak buat berdasarkan keyword
+        let transformedSources = transformSources(result.sources);
+        if (transformedSources.length === 0) {
+          transformedSources = createKeywordSources(userQuery);
+        }
 
         let analysisResults: AnalysisResult[] = [];
         let transformedVisualization: EnhancedVisualizationData | undefined;
@@ -1966,7 +2266,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         } catch (tokenError) {
           console.error("❌ Validasi token gagal:", tokenError);
           throw new Error(
-            "Anda perlu login terlebih dahulu. Silakan login untuk menggunakan fitur ini."
+            "Session tidak valid. Silakan refresh halaman untuk melanjutkan."
           );
         }
 
@@ -1976,22 +2276,21 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         console.error("❌ Error dalam handleProcess:", error);
 
         let errorMessage = "Terjadi error yang tidak diketahui";
-        let shouldRedirectToLogin = false;
 
         if (error instanceof Error) {
           if (
             error.message.includes("Token tidak ditemukan") ||
-            error.message.includes("Anda perlu login") ||
+            error.message.includes("Session tidak valid") ||
+            error.message.includes("Token tidak valid") ||
             error.message.includes("Authorization header is required") ||
             error.message.includes("401") ||
             error.message.includes("Unauthorized")
           ) {
-            errorMessage = "❌ Session telah berakhir. Silakan login ulang.";
-            shouldRedirectToLogin = true;
+            errorMessage = "❌ Session tidak valid. Silakan refresh halaman.";
 
+            // Hapus token yang tidak valid dari localStorage
             localStorage.removeItem("accessToken");
             localStorage.removeItem("refreshToken");
-            localStorage.removeItem("user");
           } else {
             errorMessage = `❌ ${error.message}`;
           }
@@ -2006,13 +2305,6 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         setChatHistory((prev) => [...prev, errorMessageObj]);
         setError(errorMessage);
         setApiStatus("error");
-
-        if (shouldRedirectToLogin) {
-          setTimeout(() => {
-            console.log("🔄 Mengarahkan ke halaman login...");
-            window.location.href = "/login";
-          }, 3000);
-        }
       } finally {
         setIsProcessing(false);
         setQuery("");
@@ -2214,7 +2506,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                       (insight: string, i: number) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
                           <Sparkles className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                          <span>{removeMarkdownBold(insight)}</span>
+                          <MarkdownText text={insight} />
                         </li>
                       )
                     )}
@@ -2237,7 +2529,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                       (rec: string, i: number) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
                           <CheckCircle2 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                          <span>{removeMarkdownBold(rec)}</span>
+                          <MarkdownText text={rec} />
                         </li>
                       )
                     )}
@@ -2307,7 +2599,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         if (!message.enhanced_metadata) return null;
 
         return (
-          <div className="pt-4 border-t border-border/50 space-y-3">
+          <div>
             {/* Advanced Visual Metadata */}
             {message.enhanced_metadata.analysis_type ===
               "social_network_analysis" && (
@@ -2349,52 +2641,6 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3">
-              {message.enhanced_metadata.data_source === "real_data" ? (
-                <Badge
-                  variant="default"
-                  className="bg-green-100 text-green-700 border-green-200"
-                >
-                  <Database className="w-3 h-3 mr-1" />
-                  Data Nyata
-                  {message.enhanced_metadata.real_data_confidence && (
-                    <span className="ml-1">
-                      (
-                      {Math.round(
-                        message.enhanced_metadata.real_data_confidence * 100
-                      )}
-                      %)
-                    </span>
-                  )}
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="bg-blue-100 text-blue-700 border-blue-200"
-                >
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Data AI-Generated
-                </Badge>
-              )}
-
-              {message.enhanced_metadata.data_points && (
-                <Badge variant="outline" className="text-xs">
-                  📊 {message.enhanced_metadata.data_points} titik data
-                </Badge>
-              )}
-            </div>
-
-            {message.enhanced_metadata.query_type && (
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-purple-50 text-purple-700"
-                >
-                  Tipe: {message.enhanced_metadata.query_type}
-                </Badge>
               </div>
             )}
 
@@ -2471,9 +2717,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
         case "text_response":
           return (
             <div className="space-y-6">
-              <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
-                {removeMarkdownBold(message.content)}
-              </div>
+              <MarkdownText text={message.content} />
               <MetadataContent message={message} />
               {hasSources && (
                 <div className="pt-4 border-t border-border/50">
@@ -2487,9 +2731,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
           return (
             <div className="space-y-6">
               {hasVisualization && <VisualAnalysisContent message={message} />}
-              <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
-                {removeMarkdownBold(message.content)}
-              </div>
+              <MarkdownText text={message.content} />
               <MetadataContent message={message} />
               {hasSources && (
                 <div className="pt-4 border-t border-border/50">
@@ -2570,45 +2812,10 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                   >
                     {getModelDisplayName(selectedModel)}
                   </Badge>
-                  <Badge variant="secondary" className="text-xs">
-                    {AI_PERSONAS[selectedPersona as keyof typeof AI_PERSONAS]
-                      ?.name || "Analyst"}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={cn("text-xs", getModeColor(selectedMode))}
-                  >
-                    {getModeIcon(selectedMode)}
-                    {getModeConfig(selectedMode).name}
-                  </Badge>
-
-                  <div className="flex items-center gap-1">
-                    <Badge
-                      variant="outline"
-                      className="text-xs bg-blue-50 text-blue-700 border-blue-200"
-                    >
-                      <Filter className="w-3 h-3 mr-1" />
-                      Klasifikasi
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className="text-xs bg-green-50 text-green-700 border-green-200"
-                    >
-                      <Cpu className="w-3 h-3 mr-1" />
-                      Tools
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className="text-xs bg-orange-50 text-orange-700 border-orange-200"
-                    >
-                      <Shield className="w-3 h-3 mr-1" />
-                      Keamanan
-                    </Badge>
-                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{chatHistory.length} pesan</span>
+              <div className="text-xs text-muted-foreground">
+                {getModeConfig(selectedMode).description}
               </div>
             </div>
             {error && (
@@ -2626,9 +2833,6 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                 <span className={cn("text-sm font-medium", getStatusColor())}>
                   {getStatusText()}
                 </span>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {getModeConfig(selectedMode).description}
               </div>
             </div>
           </div>
@@ -2703,9 +2907,7 @@ const AIQueryInput = forwardRef<AIQueryInputRef, AIQueryInputProps>(
                             {message.role === "assistant" ? (
                               <MessageContent message={message} />
                             ) : (
-                              <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
-                                {removeMarkdownBold(message.content)}
-                              </div>
+                              <MarkdownText text={message.content} />
                             )}
                           </div>
                           {message.role === "user" && (

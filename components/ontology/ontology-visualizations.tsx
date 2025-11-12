@@ -1309,7 +1309,7 @@ export const EnhancedOntologyContent = ({
 
       {/* Tab Content */}
       <div className="min-h-96">
-        {/* {activeTab === "d3_graph" && (
+        {activeTab === "d3_graph" && (
           <div className="space-y-4">
             {graph ? (
               <D3OntologyVisualization data={data} />
@@ -1320,7 +1320,7 @@ export const EnhancedOntologyContent = ({
               </div>
             )}
           </div>
-        )} */}
+        )}
 
         {activeTab === "simple_graph" && (
           <div className="space-y-4">
